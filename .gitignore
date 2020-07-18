@@ -141,3 +141,4 @@ cython_debug/
 .reference
 .vscode
 data
+model
