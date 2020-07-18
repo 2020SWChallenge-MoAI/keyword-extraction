@@ -1,2 +1,5 @@
 transformers
+sklearn
+gensim
 konlpy
+soynlp
