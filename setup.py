@@ -8,6 +8,6 @@ setup(
     author_email='me@junbread.win',
     url='https://github.com/2020swchallenge-moai/keyword-extraction',
     description='Keyword extraction based on TF-IDF',
-    install_requires=['sklearn>=0.23', 'krwordrank'],
+    install_requires=['scikit-learn>=0.23', 'krwordrank', 'konlpy'],
     packages=find_packages()
 )

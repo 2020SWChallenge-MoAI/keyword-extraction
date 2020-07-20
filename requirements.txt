@@ -1,5 +1,4 @@
-transformers
-sklearn
+scikit-learn
 gensim
 konlpy
-soynlp
+krwordrank
