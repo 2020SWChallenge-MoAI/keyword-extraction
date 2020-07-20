@@ -1,9 +1,11 @@
 from krwordrank.hangle import normalize
 
+from . import Document, AnalyzedDocument
 
-def preprocess(raw_document, english=False, number=False):
+
+def convert_to_document(title, raw_document, english=False, number=False):
     """
-    Processes raw document to list of sentences.
+    Processes raw document to `keyext.Document` object.
 
     - sentences are splitted by period(.), question mark(?), and exclamation mark(!).
     - all non-word characters (non hangle) are eliminated.
@@ -15,8 +17,8 @@ def preprocess(raw_document, english=False, number=False):
     """
 
     # join all lines
-    str = ''.join(line.strip() for line in f)
-    
+    raw_document.replace('\n', '').replace('\r','').strip()
+
     # regularize quotation mark
     str = re.sub('[‘’]', "'", str)
     str = re.sub('[“”]', '"', str)
@@ -42,9 +44,11 @@ def preprocess(raw_document, english=False, number=False):
         if not parenthesis and (not quote or (quote and not re.match('[\.\?\!]', c))):
             new_str += c
     str = new_str
-    
+
     # split and normalize sentences by period
     sents = [normalize(sent) for sent in str.split('.')]
     sents = [sent for sent in sents if sent != '']
 
-    return sents
+    document = Document(title, sents)
+
+    return document
