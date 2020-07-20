@@ -1,7 +1,3 @@
-from .preprocess import convert_to_document
-from .extraction import KeywordExtractor
-
-
 class Document(object):
     def __init__(self, title, sentences):
         super().__init__()
@@ -16,3 +12,6 @@ class AnalyzedDocument(Document):
         self.vector = vector
         self.keywords = keywords
         self.tags = tags
+
+from .preprocess import convert_to_document
+from .extraction import KeywordExtractor
