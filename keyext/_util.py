@@ -1,3 +1,5 @@
+from itertools import combinations
+
 def remove_duplicate(list):
     seen = set()
     seen_add = seen.add
