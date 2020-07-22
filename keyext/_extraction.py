@@ -39,6 +39,7 @@ class KeywordExtractor(object):
         self._documents = []
         self._idx2vocab = []
         self._vocab2idx = {}
+        self._docid2idx = {}
 
         if model_path is not None:
             self.load(model_path)
@@ -49,6 +50,7 @@ class KeywordExtractor(object):
                 self._documents = pickle.load(f)
                 self._idx2vocab = pickle.load(f)
                 self._vocab2idx = pickle.load(f)
+                self._docid2idx = pickle.load(f)
         except:
             raise ValueError("model is not a valid file.")
 
@@ -57,11 +59,33 @@ class KeywordExtractor(object):
             pickle.dump(self._documents, f)
             pickle.dump(self._idx2vocab, f)
             pickle.dump(self._vocab2idx, f)
+            pickle.dump(self._docid2idx, f)
 
     def build(self, documents):
+        """
+        Build keyword extraction model from documents.
+
+        ### Arguments
+
+        - documents: preprocessed documents. must be list like below:
+        ```python
+        [
+            (id1, [sentence1, sentence2, ...]),
+            (id2, [sentence1, sentence2, ...]),
+            ...
+        ]
+        ```
+        """
+
+        # build id to idx mapping
+        for idx, doc in enumerate(documents):
+            self._docid2idx[doc[0]] = idx
+        
+        documents = [sents for id, sents in documents]
+
         # build document vectors and vocab
         document_vectors = self._document_vectorizer.fit_transform(
-            [' '.join(doc.sentences) for doc in documents])
+            [' '.join(sents) for sents in documents])
 
         idx2vocab = [v for v, idx in sorted(
             self._document_vectorizer.vocabulary_.items(), key=lambda x:x[1])]
@@ -71,52 +95,51 @@ class KeywordExtractor(object):
         self._vocab2idx = vocab2idx
 
         # pos tagging and build sentence vector
-        for document, document_vector in zip(documents, document_vectors):
-            doc = AnalyzedDocument(document)
+        for sentences, document_vector in zip(documents, document_vectors):
+            document = Document()
 
             # build sentences vectors and vocab
-            sentence_vectors = self._sentence_vectorizer.fit_transform(doc.sentences)
+            sentence_vectors = self._sentence_vectorizer.fit_transform(sentences)
 
             # build document-wide keyword set
-            document_keywords = [(weight, idx2vocab[idx])
+            document.keywords = [(weight, idx2vocab[idx])
                                  for idx, weight
                                  in enumerate(document_vector.toarray().squeeze())
                                  if weight > 0]
-            document_keywords = sorted(document_keywords, reverse=True)
-            document_vocab2idx = self._sentence_vectorizer.vocabulary_
-            document_idx2vocab = [v for v, idx in sorted(
+            document.keywords = sorted(document.keywords, reverse=True)
+            document.vocab2idx = self._sentence_vectorizer.vocabulary_
+            document.idx2vocab = [v for v, idx in sorted(
                 self._sentence_vectorizer.vocabulary_.items(), key=lambda x:x[1])]
+            document.sentences = []
 
             # fill informations
-            doc.vector = document_vector
-            doc.keywords = document_keywords
-            doc.idx2vocab = document_idx2vocab
-            doc.vocab2idx = document_vocab2idx
-            doc.analyzed_sentences = []
-            for sentence, sentence_vector in zip(doc.sentences, sentence_vectors):
-                sent = AnalyzedSentence()
+            for sentence, sentence_vector in zip(sentences, sentence_vectors):
+                sent = Sentence(sentence)
 
                 sent.vector = sentence_vector
                 sent.tags = self._tagger.pos(sentence)
 
                 keyword_tfidfs = document_vector.toarray().squeeze()
-                sentence_keywords = [document_idx2vocab[idx]
+                sentence_keywords = [document.idx2vocab[idx]
                                      for idx, weight
-                                     in enumerate(sentence_vector.toarray().squeeze()) if weight > 0]
+                                     in enumerate(sentence_vector.toarray().squeeze())
+                                     if weight > 0]
 
-                sent.keywords = []
-                for keyword in sentence_keywords:
-                    if keyword in vocab2idx:
-                        sent.keywords.append((keyword_tfidfs[vocab2idx[keyword]], keyword))
+                sent.keywords = [(keyword_tfidfs[vocab2idx[keyword]], keyword)
+                                 for keyword
+                                 in sentence_keywords
+                                 if keyword in vocab2idx]
 
-                doc.analyzed_sentences.append(sent)
+                document.sentences.append(sent)
 
-            self._documents.append(doc)
+            self._documents.append(document)
 
     def recommend(self, document_id, keyword_history=[], num=2):
         keywords = []
         candidates = []
         included = set()
+
+        document = self._documents[self._docid2idx[document_id]]
 
         # mark keyword history as already included
         for keyword in keyword_history:
@@ -124,9 +147,9 @@ class KeywordExtractor(object):
             included.update(self._tagger.morphs(keyword))
 
         if len(keyword_history) > 0:
-            candidates = self.__search_related_keywords(document_id, keyword_history)
+            candidates = self.__search_related_keywords(document, keyword_history)
         else:
-            candidates = self._documents[document_id].keywords
+            candidates = document.keywords
 
         # get keywords
         for keyword in candidates:
@@ -149,8 +172,7 @@ class KeywordExtractor(object):
 
         return keywords[:num]
 
-    def __search_related_keywords(self, document_id, keyword_history):
-        document = self._documents[document_id]
+    def __search_related_keywords(self, document, keyword_history):
         result = []
 
         # build search vector (count based bag-of-word vector)
@@ -166,9 +188,12 @@ class KeywordExtractor(object):
                     search_vector[0][document.vocab2idx[predicate]] = 1
 
         # search by cosine similarity
-        similarity = cosine_similarity(search_vector, vstack([s.vector for s in document.analyzed_sentences]))
+        similarity = cosine_similarity(search_vector, vstack([s.vector for s in document.sentences]))
 
-        similar_sentences = [(sim, document.analyzed_sentences[idx]) for idx, sim in enumerate(similarity.squeeze()) if sim > 0]
+        similar_sentences = [(sim, document.sentences[idx])
+                             for idx, sim
+                             in enumerate(similarity.squeeze())
+                             if sim > 0]
         similar_sentences = sorted(similar_sentences, key=lambda tuple: tuple[0], reverse=True)
 
         # add results

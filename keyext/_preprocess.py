@@ -1,12 +1,12 @@
 import re
 from krwordrank.hangle import normalize
 
-from . import Document, AnalyzedDocument
+from ._model import *
 
 
-def convert_to_document(title, raw_document, english=False, number=False):
+def preprocess(raw_document, english=False, number=False):
     """
-    Processes raw document to `keyext.Document` object.
+    Processes raw document to preprocessed sentences.
 
     - sentences are splitted by period(.), question mark(?), and exclamation mark(!).
     - all non-word characters (non hangle) are eliminated.
@@ -15,7 +15,6 @@ def convert_to_document(title, raw_document, english=False, number=False):
 
     ### Arguments
 
-    - title: document title
     - raw_document: document contents
     - author: document author. (optional)
     - english: if `True`, english words are included in preprocessed sentences. default: `False`
@@ -60,6 +59,4 @@ def convert_to_document(title, raw_document, english=False, number=False):
     sents = [normalize(sent) for sent in document.split('.')]
     sents = [sent for sent in sents if sent != '']
 
-    document = Document(title, sents)
-
-    return document
+    return sents
