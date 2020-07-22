@@ -1,27 +1,6 @@
 class Document(object):
     """
-    Preprocessed document.
-
-    Strongly recommends to create with `keyext.convert_to_document`.
-
-    ---
-
-    ### Attributes
-    - title: document title
-    - sentences: document sentences (preprocessed)
-    """
-
-    def __init__(self, title, sentences):
-        super().__init__()
-        self.title = title
-        self.sentences = sentences
-
-
-class AnalyzedDocument(Document):
-    """
     Document analyzed by `keyext.KeywordExtractor`.
-
-    ---
 
     ### Attributes
     inherited attributes of `keyext.Document`
@@ -32,33 +11,33 @@ class AnalyzedDocument(Document):
     - idx2vocab: document-wide vocabulary (not database-wide)
     """
 
-    def __init__(self, document, vector=None, keywords=None,
-                 analyzed_sentences=None, idx2vocab=None, vocab2idx=None):
-        super().__init__(document.title, document.sentences)
+    def __init__(self, vector=None, keywords=None,
+                 sentences=None, idx2vocab=None, vocab2idx=None):
+        super().__init__()
 
         self.vector = vector
         self.keywords = keywords
-        self.analyzed_sentences = analyzed_sentences
+        self.sentences = sentences
         self.idx2vocab = idx2vocab
         self.vocab2idx = vocab2idx
 
 
-class AnalyzedSentence(object):
+class Sentence(object):
     """
     Analyzed sentence.
 
-    ---
-
     ### Attributes
 
+    - original: non-tagged sentence string
     - vector: sentence term vector (document-wide, count vector)
     - keywords: sentence keywords (sorted by keyword TF-IDF (not count))
     - tags: pos tagged sentence
     """
 
-    def __init__(self, vector=None, keywords=None, tags=None):
+    def __init__(self, original, vector=None, keywords=None, tags=None):
         super().__init__()
 
+        self.original = original
         self.vector = vector
         self.keywords = keywords
         self.tags = tags
