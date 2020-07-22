@@ -33,13 +33,14 @@ class AnalyzedDocument(Document):
     """
 
     def __init__(self, document, vector=None, keywords=None,
-                 analyzed_sentences=None, idx2vocab=None):
+                 analyzed_sentences=None, idx2vocab=None, vocab2idx=None):
         super().__init__(document.title, document.sentences)
 
         self.vector = vector
         self.keywords = keywords
         self.analyzed_sentences = analyzed_sentences
         self.idx2vocab = idx2vocab
+        self.vocab2idx = vocab2idx
 
 
 class AnalyzedSentence(object):

@@ -15,7 +15,7 @@ class KeywordExtractor(object):
 
     ### Arguments
 
-    - options (dict): keyword analyze options.
+    - options (dict): keyword analysis options.
         - ngram_range (tuple): (min phrase length, max phrase length)
         - max_df (float): set maximum document frequency. Every term that over `max_df` will be excluded.
     - model_path: path of pre-analyzed document model (optional)
@@ -83,6 +83,7 @@ class KeywordExtractor(object):
                                  in enumerate(document_vector.toarray().squeeze())
                                  if weight > 0]
             document_keywords = sorted(document_keywords, reverse=True)
+            document_vocab2idx = self._sentence_vectorizer.vocabulary_
             document_idx2vocab = [v for v, idx in sorted(
                 self._sentence_vectorizer.vocabulary_.items(), key=lambda x:x[1])]
 
@@ -90,6 +91,7 @@ class KeywordExtractor(object):
             doc.vector = document_vector
             doc.keywords = document_keywords
             doc.idx2vocab = document_idx2vocab
+            doc.vocab2idx = document_vocab2idx
             doc.analyzed_sentences = []
             for sentence, sentence_vector in zip(doc.sentences, sentence_vectors):
                 sent = AnalyzedSentence()
@@ -121,7 +123,7 @@ class KeywordExtractor(object):
             included.add(keyword)
             included.update(self._tagger.morphs(keyword))
 
-        if False and len(keyword_history) > 0:
+        if len(keyword_history) > 0:
             candidates = self.__search_related_keywords(document_id, keyword_history)
         else:
             candidates = self._documents[document_id].keywords
@@ -160,22 +162,18 @@ class KeywordExtractor(object):
             predicates = [' '.join(ngram) for ngram in ordered_combination(tagged_keyword, ngram_range)]
 
             for predicate in predicates:
-                try:
-                    pred_idx = document.idx2vocab.index(predicate)
-                    search_vector[0][pred_idx] = 1
-                except ValueError:
-                    continue
+                if predicate in document.vocab2idx:
+                    search_vector[0][document.vocab2idx[predicate]] = 1
 
         # search by cosine similarity
         similarity = cosine_similarity(search_vector, vstack([s.vector for s in document.analyzed_sentences]))
 
         similar_sentences = [(sim, document.analyzed_sentences[idx]) for idx, sim in enumerate(similarity.squeeze()) if sim > 0]
         similar_sentences = sorted(similar_sentences, key=lambda tuple: tuple[0], reverse=True)
-        print([sent.keywords for sim, sent in similar_sentences])
 
         # add results
         for sim, sentence in similar_sentences:
-            result.extend([word for vector, word in sentence.keywords])
+            result.extend(sentence.keywords)
 
         return remove_duplicate(result)
 
