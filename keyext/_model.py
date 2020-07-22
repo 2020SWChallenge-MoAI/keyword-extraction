@@ -29,17 +29,17 @@ class AnalyzedDocument(Document):
     - vector: document term vector
     - keywords: extracted keywords based on TF-IDF
     - analyzed_sentences: sentences of documents, contains pos tag and count vector
-    - vocab: document-wide vocabulary (not database-wide)
+    - idx2vocab: document-wide vocabulary (not database-wide)
     """
 
     def __init__(self, document, vector=None, keywords=None,
-                 analyzed_sentences=None, vocab=None):
+                 analyzed_sentences=None, idx2vocab=None):
         super().__init__(document.title, document.sentences)
 
         self.vector = vector
         self.keywords = keywords
         self.analyzed_sentences = analyzed_sentences
-        self.vocab = vocab
+        self.idx2vocab = idx2vocab
 
 
 class AnalyzedSentence(object):
