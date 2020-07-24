@@ -118,8 +118,11 @@ class KeywordExtractor(object):
         ```
         """
         key = ','.join(keyword_history)
-
-        return dummy_scinario[key][:num]
+        
+        if key in dummy_scinario:
+            return dummy_scinario[key][:num]
+        
+        return []
 
     def recommend_from_sentences(self, sentences, keyword_history=[], num=2):
         if self._document_vectorizer.vocabulary_ is None:
