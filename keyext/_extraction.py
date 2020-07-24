@@ -105,8 +105,21 @@ class KeywordExtractor(object):
                            for sentences, document_vector
                            in zip(documents, document_vectors)]
 
-    def recommend_dummy(self, document_id, keyword_history=[], num=2, dummy_responses=[]):
-        return dummy_responses[:num]
+    def recommend_dummy(self, document_id, keyword_history=[], num=2, dummy_scinario={}):
+        """
+        Returns recommend keywords based on dummy scinario
+
+        ```python
+        {
+            'keyword1,keyword2': ['recommend-1', 'recommend-2'],
+            'keyword1,keyword2,keyword3': ['recommend-a', 'recommend-b'],
+            ...
+        }
+        ```
+        """
+        key = ','.join(keyword_history)
+
+        return dummy_scinario[key][:num]
 
     def recommend_from_sentences(self, sentences, keyword_history=[], num=2):
         if self._document_vectorizer.vocabulary_ is None:
