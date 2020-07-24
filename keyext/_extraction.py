@@ -51,6 +51,10 @@ class KeywordExtractor(object):
                 self._idx2vocab = pickle.load(f)
                 self._vocab2idx = pickle.load(f)
                 self._docid2idx = pickle.load(f)
+
+                # load and reinit tokenizer
+                self._document_vectorizer = pickle.load(f)
+                self._document_vectorizer.tokenizer = Tokenizer(noun_only=True)
         except:
             raise ValueError("model is not a valid file.")
 
@@ -60,6 +64,10 @@ class KeywordExtractor(object):
             pickle.dump(self._idx2vocab, f)
             pickle.dump(self._vocab2idx, f)
             pickle.dump(self._docid2idx, f)
+            
+            # remove tokenizer (resolving dump issue)
+            self._document_vectorizer.tokenizer = None
+            pickle.dump(self._document_vectorizer, f)
 
     def build(self, documents):
         """
@@ -80,7 +88,7 @@ class KeywordExtractor(object):
         # build id to idx mapping
         for idx, doc in enumerate(documents):
             self._docid2idx[doc[0]] = idx
-        
+
         documents = [sents for id, sents in documents]
 
         # build document vectors and vocab
@@ -93,53 +101,69 @@ class KeywordExtractor(object):
 
         self._idx2vocab = idx2vocab
         self._vocab2idx = vocab2idx
+        self._documents = [self.__build_document(sentences, document_vector)
+                           for sentences, document_vector
+                           in zip(documents, document_vectors)]
 
-        # pos tagging and build sentence vector
-        for sentences, document_vector in zip(documents, document_vectors):
-            document = Document()
+    def recommend_dummy(self, document_id, keyword_history=[], num=2, dummy_responses=[]):
+        return dummy_responses[:num]
 
-            # build sentences vectors and vocab
-            sentence_vectors = self._sentence_vectorizer.fit_transform(sentences)
+    def recommend_from_sentences(self, sentences, keyword_history=[], num=2):
+        if self._document_vectorizer.vocabulary_ is None:
+            raise ValueError("document vectorizer is not initialized. call build() before this method.")
 
-            # build document-wide keyword set
-            document.keywords = [(weight, idx2vocab[idx])
-                                 for idx, weight
-                                 in enumerate(document_vector.toarray().squeeze())
-                                 if weight > 0]
-            document.keywords = sorted(document.keywords, reverse=True)
-            document.vocab2idx = self._sentence_vectorizer.vocabulary_
-            document.idx2vocab = [v for v, idx in sorted(
-                self._sentence_vectorizer.vocabulary_.items(), key=lambda x:x[1])]
-            document.sentences = []
+        document_vector = self._document_vectorizer.transform([' '.join(sentences)])[0]
+        document = self.__build_document(sentences, document_vector)
 
-            # fill informations
-            for sentence, sentence_vector in zip(sentences, sentence_vectors):
-                sent = Sentence(sentence)
-
-                sent.vector = sentence_vector
-                sent.tags = self._tagger.pos(sentence)
-
-                keyword_tfidfs = document_vector.toarray().squeeze()
-                sentence_keywords = [document.idx2vocab[idx]
-                                     for idx, weight
-                                     in enumerate(sentence_vector.toarray().squeeze())
-                                     if weight > 0]
-
-                sent.keywords = [(keyword_tfidfs[vocab2idx[keyword]], keyword)
-                                 for keyword
-                                 in sentence_keywords
-                                 if keyword in vocab2idx]
-
-                document.sentences.append(sent)
-
-            self._documents.append(document)
+        return self.__get_keywords(document, keyword_history)[:num]
 
     def recommend(self, document_id, keyword_history=[], num=2):
+        document = self._documents[self._docid2idx[document_id]]
+        return self.__get_keywords(document, keyword_history)[:num]
+
+    def __build_document(self, sentences, document_vector):
+        document = Document()
+
+        # build sentences vectors and vocab
+        sentence_vectors = self._sentence_vectorizer.fit_transform(sentences)
+
+        # build document-wide keyword set
+        document.keywords = [(weight, self._idx2vocab[idx])
+                             for idx, weight
+                             in enumerate(document_vector.toarray().squeeze())
+                             if weight > 0]
+        document.keywords = sorted(document.keywords, reverse=True)
+        document.vocab2idx = self._sentence_vectorizer.vocabulary_
+        document.idx2vocab = [v for v, idx in sorted(
+            self._sentence_vectorizer.vocabulary_.items(), key=lambda x:x[1])]
+        document.sentences = []
+
+        # fill informations
+        for sentence, sentence_vector in zip(sentences, sentence_vectors):
+            sent = Sentence(sentence)
+
+            sent.vector = sentence_vector
+            sent.tags = self._tagger.pos(sentence)
+
+            keyword_tfidfs = document_vector.toarray().squeeze()
+            sentence_keywords = [document.idx2vocab[idx]
+                                 for idx, weight
+                                 in enumerate(sentence_vector.toarray().squeeze())
+                                 if weight > 0]
+
+            sent.keywords = [(keyword_tfidfs[self._vocab2idx[keyword]], keyword)
+                             for keyword
+                             in sentence_keywords
+                             if keyword in self._vocab2idx]
+
+            document.sentences.append(sent)
+
+        return document
+
+    def __get_keywords(self, document, keyword_history):
         keywords = []
         candidates = []
         included = set()
-
-        document = self._documents[self._docid2idx[document_id]]
 
         # mark keyword history as already included
         for keyword in keyword_history:
@@ -170,7 +194,7 @@ class KeywordExtractor(object):
                 for word_piece in word_pieces:
                     included.add(word_piece)
 
-        return keywords[:num]
+        return keywords
 
     def __search_related_keywords(self, document, keyword_history):
         result = []
