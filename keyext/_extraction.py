@@ -64,7 +64,7 @@ class KeywordExtractor(object):
             pickle.dump(self._idx2vocab, f)
             pickle.dump(self._vocab2idx, f)
             pickle.dump(self._docid2idx, f)
-            
+
             # remove tokenizer (resolving dump issue)
             self._document_vectorizer.tokenizer = None
             pickle.dump(self._document_vectorizer, f)
@@ -104,25 +104,6 @@ class KeywordExtractor(object):
         self._documents = [self.__build_document(sentences, document_vector)
                            for sentences, document_vector
                            in zip(documents, document_vectors)]
-
-    def recommend_dummy(self, document_id, keyword_history=[], num=2, dummy_scinario={}):
-        """
-        Returns recommend keywords based on dummy scinario
-
-        ```python
-        {
-            'keyword1,keyword2': ['recommend-1', 'recommend-2'],
-            'keyword1,keyword2,keyword3': ['recommend-a', 'recommend-b'],
-            ...
-        }
-        ```
-        """
-        key = ','.join(keyword_history)
-        
-        if key in dummy_scinario:
-            return dummy_scinario[key][:num]
-        
-        return []
 
     def recommend_from_sentences(self, sentences, keyword_history=[], num=2):
         if self._document_vectorizer.vocabulary_ is None:
@@ -241,6 +222,30 @@ class KeywordExtractor(object):
             result.extend(sentence.keywords)
 
         return remove_duplicate(result)
+
+
+class DummyExtractor(object):
+    def __init__(self):
+        super().__init__()
+
+    def recommend(self, document_id, keyword_history=[], num=2, scenario={}):
+        """
+        Returns recommend keywords based on dummy scinario
+
+        ```python
+        {
+            'keyword1,keyword2': ['recommend-1', 'recommend-2'],
+            'keyword1,keyword2,keyword3': ['recommend-a', 'recommend-b'],
+            ...
+        }
+        ```
+        """
+        key = ','.join(keyword_history)
+        
+        if key in scenario:
+            return scenario[key][:num]
+        
+        return []
 
 
 class Tokenizer(object):
