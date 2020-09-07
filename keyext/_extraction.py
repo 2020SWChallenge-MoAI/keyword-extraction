@@ -1,9 +1,11 @@
 import pickle
 import numpy as np
-from konlpy.tag import Komoran
+from konlpy.tag import *
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse import vstack
+
+from collections import defaultdict
 
 from ._model import *
 from ._util import remove_duplicate, ordered_combination
@@ -28,13 +30,14 @@ class KeywordExtractor(object):
         self._max_df = options['max_df']
 
         self._tagger = Komoran()
+        self._tokenizer = Tokenizer(noun_only=True)
         self._document_vectorizer = TfidfVectorizer(
             ngram_range=self._ngram_range,
             max_df=self._max_df,
-            tokenizer=Tokenizer(noun_only=True))
+            tokenizer=self._tokenizer)
         self._sentence_vectorizer = CountVectorizer(
             ngram_range=self._ngram_range,
-            tokenizer=Tokenizer(noun_only=True))
+            tokenizer=self._tokenizer)
 
         self._documents = []
         self._idx2vocab = []
@@ -90,6 +93,8 @@ class KeywordExtractor(object):
             self._docid2idx[doc[0]] = idx
 
         documents = [sents for id, sents in documents]
+
+        self._tokenizer.initialize(documents)
 
         # build document vectors and vocab
         document_vectors = self._document_vectorizer.fit_transform(
@@ -230,7 +235,7 @@ class DummyExtractor(object):
 
     def recommend(self, document_id, keyword_history=[], num=2, scenario={}):
         """
-        Returns recommend keywords based on dummy scinario
+        Returns recommend keywords based on dummy scenario
 
         ```python
         {
@@ -241,19 +246,83 @@ class DummyExtractor(object):
         ```
         """
         key = ','.join(keyword_history)
-        
+
         if key in scenario:
             return scenario[key][:num]
-        
+
         return []
 
 
 class Tokenizer(object):
-    def __init__(self, tagger=Komoran(), noun_only=True):
+    def __init__(self, tagger=Komoran(), noun_only=True, ngram_range=(1, 3)):
         self._tagger = tagger
         self._noun_only = noun_only
+        self.ngrams = {}
+        self.ngram_range = ngram_range
 
     def __call__(self, sent):
-        pos = self._tagger.pos(sent)
-        pos = ['{}/{}'.format(word, tag) for word, tag in pos if not self._noun_only or tag.startswith('NN')]
-        return pos
+        return self.tokenize(sent)
+
+    def initialize(self, docs, min_count=5):
+        def to_ngrams(words, n):
+            ngrams = []
+            for b in range(0, len(words) - n + 1):
+                ngrams.append(tuple(words[b:b+n]))
+            return ngrams
+
+        n_begin, n_end = self.ngram_range
+        ngram_counter = defaultdict(int)
+
+        docs = [' '.join(sents) for sents in docs]
+
+        for doc in docs:
+            words = self._tokenize(doc)
+
+            for n in range(n_begin, n_end + 1):
+                for ngram in to_ngrams(words, n):
+                    ngram_counter[ngram] += 1
+
+        ngram_counter = {
+            ngram: count for ngram, count in ngram_counter.items() if count >= min_count
+        }
+
+        ngram_counter_ = {}
+
+        for ngram, count in ngram_counter.items():
+            if len(ngram) == 1:
+                ngram_counter_[ngram] = count
+                continue
+            first = ngram_counter[ngram[:-1]]
+            second = ngram_counter[ngram[1:]]
+            score = (count - 5) / (first * second)
+            if score > 0:
+                ngram_counter_[ngram] = count
+
+        self.ngrams = ngram_counter_
+
+    def tokenize(self, sent):
+        if not sent:
+            return []
+
+        unigrams = self._tokenize(sent)
+
+        n_begin, n_end = self.ngram_range
+        ngrams = []
+        for n in range(n_begin, n_end + 1):
+            for ngram in self._to_ngrams(unigrams, n):
+                ngrams.append(' '.join(ngram))
+        return ngrams
+
+    def _tokenize(self, sent):
+        words = self._tagger.pos(sent)
+        words = ['{}/{}'.format(word, tag) for word, tag in words if not self._noun_only or tag.startswith('NN')]
+
+        return words
+
+    def _to_ngrams(self, words, n):
+        ngrams = []
+        for b in range(0, len(words) - n + 1):
+            ngram = tuple(words[b:b+n])
+            if ngram in self.ngrams:
+                ngrams.append(ngram)
+        return ngrams
