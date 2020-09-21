@@ -13,3 +13,9 @@ You can also install by `pip` command:
 ```sh
 pip install .
 ```
+
+### Versioned Installation
+
+```sh
+python setup-versioned.py install
+```
