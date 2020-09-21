@@ -89,11 +89,15 @@ class KeywordExtractor(object):
         for idx, doc in enumerate(documents):
             self._docid2idx[doc[0]] = idx
 
+        print("document id mapping complete")
+
         documents = [sents for id, sents in documents]
 
         # build document vectors and vocab
         document_vectors = self._document_vectorizer.fit_transform(
             [' '.join(sents) for sents in documents])
+
+        print("document vectorizer initialization complete")
 
         idx2vocab = [v for v, idx in sorted(
             self._document_vectorizer.vocabulary_.items(), key=lambda x:x[1])]
@@ -101,10 +105,16 @@ class KeywordExtractor(object):
 
         self._idx2vocab = idx2vocab
         self._vocab2idx = vocab2idx
-        self._documents = [self.__build_document(sentences, document_vector)
-                           for sentences, document_vector
-                           in zip(documents, document_vectors)]
 
+        print(f"start document vectorizing... ({len(documents)} documents)")
+
+        self._documents = []
+        for i, (sentences, document_vector) in enumerate(zip(documents, document_vectors)):
+            self._documents.append(self.__build_document(sentences, document_vector))
+            print(f"document {i + 1}/{len(documents)} complete")
+
+        print("finished")
+            
     def recommend_from_sentences(self, sentences, keyword_history=[], num=2):
         if self._document_vectorizer.vocabulary_ is None:
             raise ValueError("document vectorizer is not initialized. call build() before this method.")
