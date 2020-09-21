@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='keyext',
-    version='0.0.1',
+    version='1.0.0',
     author='Junhyun Kim',
     author_email='me@junbread.win',
     url='https://github.com/2020swchallenge-moai/keyword-extraction',
