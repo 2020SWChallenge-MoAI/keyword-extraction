@@ -183,8 +183,8 @@ class KeywordExtractor(object):
             candidates = document.keywords
 
         # get keywords
-        for keyword in candidates:
-            word_pieces = [k.split('/')[0] for k in keyword[1].split(' ')]
+        for weight, keyword in candidates:
+            word_pieces = [k.split('/')[0] for k in keyword.split(' ')]
             word = ''.join(word_pieces)
 
             duplicated = False
@@ -196,7 +196,7 @@ class KeywordExtractor(object):
                 duplicated = True
 
             if not duplicated:
-                keywords.append(word)
+                keywords.append((weight, word))
                 included.add(word)
                 for word_piece in word_pieces:
                     included.add(word_piece)
