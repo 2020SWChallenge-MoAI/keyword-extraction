@@ -1,12 +1,16 @@
 from setuptools import setup, find_packages
+import json
 
-setup(
-    name='keyext',
-    version='1.0.0',
-    author='Junhyun Kim',
-    author_email='me@junbread.win',
-    url='https://github.com/2020swchallenge-moai/keyword-extraction',
-    description='Keyword extraction based on TF-IDF',
-    install_requires=['scikit-learn>=0.23', 'krwordrank>=1.0', 'konlpy>=0.5'],
-    packages=find_packages()
-)
+with open('metadata.json', 'r') as f:
+    metadata = json.load(f)
+
+    setup(
+        name=metadata['name'],
+        version=metadata['version'],
+        author=metadata['author'],
+        author_email=metadata['author_email'],
+        url=metadata['url'],
+        description=metadata['description'],
+        install_requires=metadata['install_requires'],
+        packages=find_packages()
+    )
