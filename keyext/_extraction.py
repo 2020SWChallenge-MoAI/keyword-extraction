@@ -196,7 +196,7 @@ class KeywordExtractor(object):
                 duplicated = True
 
             if not duplicated:
-                keywords.append((weight, word))
+                keywords.append({'weight': weight, 'word': word})
                 included.add(word)
                 for word_piece in word_pieces:
                     included.add(word_piece)
