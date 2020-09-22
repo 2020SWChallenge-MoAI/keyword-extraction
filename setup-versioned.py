@@ -1,12 +1,15 @@
 from setuptools import setup
 import json
 import os
+import glob
 
 with open('metadata.json', 'r') as f:
     metadata = json.load(f)
     name_versioned = f'{metadata["name"]}_{metadata["version"].replace(".","")}'
 
-    os.symlink(metadata['name'], name_versioned, True)
+    os.symlink(metadata['name'], name_versioned)
+    for cachefile in glob.glob(f'{metadata["name"]}/**/*.pyc', recursive=True):
+        os.remove(cachefile)
 
     setup(
         name=name_versioned,
