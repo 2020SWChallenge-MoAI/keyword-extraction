@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 import json
 import os
 import glob
@@ -19,7 +19,7 @@ with open('metadata.json', 'r') as f:
         url=metadata['url'],
         description=metadata['description'],
         install_requires=metadata['install_requires'],
-        packages=[name_versioned]
+        packages=find_packages(exclude=[metadata["name"], f'{metadata["name"]}.*'])
     )
 
     os.remove(name_versioned)
