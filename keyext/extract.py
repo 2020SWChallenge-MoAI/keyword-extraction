@@ -55,15 +55,15 @@ class KeywordExtractor(object):
             raise ValueError(
                 'error occured when saving model. check your model path.')
 
-    def build(self, raw_documents: List[Tuple[int, str]]):
+    def build(self, raw_documents: List[Tuple[int, List[str]]]):
         # convert to document format
         logger.info('start document converting...')
         self.documents = dict()
         self.word2postoken = defaultdict(set)
         self.word2texttoken = defaultdict(set)
 
-        for doc_id, raw_document in raw_documents:
-            self.documents[doc_id] = self._build_document(doc_id, raw_document)
+        for doc_id, raw_sentences in raw_documents:
+            self.documents[doc_id] = self._build_document(doc_id, raw_sentences)
         logger.info('document converting complete')
 
         self.tfidf_context.build(list(self.documents.values()))
@@ -72,10 +72,10 @@ class KeywordExtractor(object):
         self.word2vec_context.build(list(self.documents.values()))
         logger.info('word2vec context build complete')
 
-    def _build_document(self, doc_id, raw_document):
+    def _build_document(self, doc_id, raw_sentences):
         sentences = []
-        for sent_id, raw_sentence in enumerate(raw_document.strip().splitlines()):
-            sentence = Sentence(f'{doc_id}.{sent_id}', raw_sentence)
+        for sent_id, raw_sentence in enumerate(raw_sentences):
+            sentence = Sentence(f'{doc_id}.{sent_id}', raw_sentence.strip())
 
             tokens = self.tokenizer.tokenize(sentence.text())
             sentence.set_tokens(tokens['pos'], tokens['text'])
@@ -108,7 +108,7 @@ class KeywordExtractor(object):
         return self._recommend(document, keyword_history, num)
 
     def recommend_from_sentences(self, sentences: List[str], keyword_history=[], num: int = 3) -> List[Dict]:
-        document = self._build_document(-1, '\n'.join(sentences))
+        document = self._build_document(-1, sentences)
         return self._recommend(document, keyword_history, num)
 
     def _recommend(self, document, keyword_history, num) -> List[Dict]:
