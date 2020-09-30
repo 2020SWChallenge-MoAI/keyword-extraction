@@ -1,6 +1,6 @@
 # keyext
 
-keyword extraction based on TF-IDF method
+Keyword extraction based on statistical methods
 
 ## Installation
 
