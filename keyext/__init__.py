@@ -1,5 +1,5 @@
 __all__ = []
 
-from ._model import *
-from ._preprocess import preprocess
-from ._extraction import KeywordExtractor, DummyExtractor
+from .model import *
+from .util import preprocess, simple_preprocess
+from .extract import KeywordExtractor, DummyExtractor
