@@ -27,6 +27,8 @@ class KeywordExtractor(object):
             with open(model_path, 'rb') as f:
                 models = pickle.load(f)
                 documents = pickle.load(f)
+                word2postoken = pickle.load(f)
+                word2texttoken = pickle.load(f)
 
             if models['tfidf']:
                 self.tfidf_context.import_model(models['tfidf'])
@@ -36,6 +38,8 @@ class KeywordExtractor(object):
             #    self.ner_context.import_model(models['ner'])
 
             self.documents = documents
+            self.word2postoken = word2postoken
+            self.word2texttoken = word2texttoken
         except:
             raise ValueError('model is not a valid file.')
 
@@ -51,6 +55,8 @@ class KeywordExtractor(object):
             with open(model_path, 'wb') as f:
                 pickle.dump(models, f)
                 pickle.dump(self.documents, f)
+                pickle.dump(self.word2postoken, f)
+                pickle.dump(self.word2texttoken, f)
         except:
             raise ValueError(
                 'error occured when saving model. check your model path.')
@@ -129,7 +135,7 @@ class KeywordExtractor(object):
         else:
             keywords = self.tfidf_context.get_keywords(document)
 
-        keywords = [{'word': keyword, 'weight': weight} for keyword, weight in keywords if keyword not in keyword_history]
+        keywords = [{'word': keyword, 'weight': weight} for keyword, weight in keywords if simple_preprocess(keyword).replace(' ', '') not in keyword_history]
 
         return keywords[:num]
 
