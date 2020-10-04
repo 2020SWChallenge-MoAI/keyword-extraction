@@ -4,6 +4,7 @@ from gensim.models import FastText
 from typing import *
 
 from . import Context
+from ..util import PosTokenizer
 from ..model import *
 
 
@@ -20,7 +21,7 @@ class Word2VecContext(Context):
 
     def build(self, documents: List[Document]):
         sentences = sum([doc.sentences for doc in documents], [])
-        sentences = [sent.text_tokens() for sent in sentences]
+        sentences = [[PosTokenizer.word(token) for token in sent.tokens()] for sent in sentences]
         self.model = FastText(sentences, window=3, min_count=3, sg=1, iter=20, workers=10, word_ngrams=1)
 
         self._initialized = True

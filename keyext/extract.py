@@ -6,10 +6,11 @@ from collections import defaultdict
 
 from .context import *
 from .model import *
-from .util import NgramMerger, PosTokenizer, simple_preprocess
+from .util import NgramTokenizer, PosTokenizer, PosValidator
 
 
 logger = logging.getLogger(__name__)
+
 
 class KeywordExtractor(object):
     def __init__(self, model_path: str = None):
@@ -27,19 +28,17 @@ class KeywordExtractor(object):
             with open(model_path, 'rb') as f:
                 models = pickle.load(f)
                 documents = pickle.load(f)
-                word2postoken = pickle.load(f)
-                word2texttoken = pickle.load(f)
+                word2tokens = pickle.load(f)
 
             if models['tfidf']:
                 self.tfidf_context.import_model(models['tfidf'])
             if models['word2vec']:
                 self.word2vec_context.import_model(models['word2vec'])
-            # if models['ner']:
-            #    self.ner_context.import_model(models['ner'])
+            if models['ner']:
+                self.ner_context.import_model(models['ner'])
 
             self.documents = documents
-            self.word2postoken = word2postoken
-            self.word2texttoken = word2texttoken
+            self.word2tokens = word2tokens
         except:
             raise ValueError('model is not a valid file.')
 
@@ -50,23 +49,21 @@ class KeywordExtractor(object):
                 models['tfidf'] = self.tfidf_context.export_model()
             if self.word2vec_context._initialized:
                 models['word2vec'] = self.word2vec_context.export_model()
-            #models['ner'] = self.ner_context.export_model()
+            if self.ner_context._initialized:
+                models['ner'] = self.ner_context.export_model()
 
             with open(model_path, 'wb') as f:
                 pickle.dump(models, f)
                 pickle.dump(self.documents, f)
-                pickle.dump(self.word2postoken, f)
-                pickle.dump(self.word2texttoken, f)
+                pickle.dump(self.word2tokens, f)
         except:
-            raise ValueError(
-                'error occured when saving model. check your model path.')
+            raise ValueError('error occured when saving model. check your model path.')
 
     def build(self, raw_documents: List[Tuple[int, List[str]]]):
         # convert to document format
         logger.info('start document converting...')
         self.documents = dict()
-        self.word2postoken = defaultdict(set)
-        self.word2texttoken = defaultdict(set)
+        self.word2tokens = defaultdict(set)
 
         for doc_id, raw_sentences in raw_documents:
             self.documents[doc_id] = self._build_document(doc_id, raw_sentences)
@@ -75,67 +72,76 @@ class KeywordExtractor(object):
         self.tfidf_context.build(list(self.documents.values()))
         logger.info('tf-idf context build complete')
 
-        self.word2vec_context.build(list(self.documents.values()))
-        logger.info('word2vec context build complete')
+        #self.word2vec_context.build(list(self.documents.values()))
+        #logger.info('word2vec context build complete')
 
     def _build_document(self, doc_id, raw_sentences):
+        # initialize sentences
         sentences = []
         for sent_id, raw_sentence in enumerate(raw_sentences):
             sentence = Sentence(f'{doc_id}.{sent_id}', raw_sentence.strip())
 
             tokens = self.tokenizer.tokenize(sentence.text())
-            sentence.set_tokens(tokens['pos'], tokens['text'])
+            sentence.set_tokens(tokens)
 
             sentences.append(sentence)
 
-        logger.info(f'document {doc_id} converting complete')
-
+        # initialize document
         document = Document(f'{doc_id}', sentences)
 
-        ngram_context = NgramMerger.build_ngram_context(document)
+        # generate ngram tokens
+        ngram_context = NgramTokenizer.build_ngram_context(document)
         for sent in sentences:
-            merged_tokens = NgramMerger.merge_ngram(sent, ngram_context)
-            sent.set_tokens(merged_tokens['pos'], merged_tokens['text'])
+            ngram_tokens = NgramTokenizer.tokenize(sent, ngram_context)
+            sent.set_tokens(PosValidator.filter(ngram_tokens))
 
-            for pos_token, text_token in zip(merged_tokens['pos'], merged_tokens['text']):
-                subtokens = PosTokenizer.subtokens(pos_token)
+            for token in ngram_tokens:
+                if not PosValidator.is_valid(token):
+                    continue
+
+                word = PosTokenizer.word(token)
+                self.word2tokens[word].add(token)
+
+                subtokens = PosTokenizer.subtokens(token)
                 for word, _ in subtokens:
-                    self.word2postoken[word].add(pos_token)
-                    self.word2texttoken[word].add(text_token)
+                    self.word2tokens[word].add(token)
 
-                word = PosTokenizer.joinedtext(pos_token)
-                self.word2postoken[word].add(pos_token)
-                self.word2texttoken[word].add(text_token)
 
+        logger.info(f'document {doc_id} converting complete')
         return document
 
-    def recommend(self, document_id, keyword_history=[], num: int = 3) -> List[Dict]:
+    def recommend(self, document_id, queries: List[str] = [], num: int = 3) -> List[Dict]:
         document = self.documents[document_id]
-        return self._recommend(document, keyword_history, num)
+        return self._recommend(document, queries, num)
 
-    def recommend_from_sentences(self, sentences: List[str], keyword_history=[], num: int = 3) -> List[Dict]:
-        document = self._build_document(-1, sentences)
-        return self._recommend(document, keyword_history, num)
+    def recommend_from_sentences(self, sentences: List[str], queries: List[str] = [], num: int = 3) -> List[Dict]:
+        document = self._build_document(Document.TEMP_ID, sentences)
+        return self._recommend(document, queries, num)
 
-    def _recommend(self, document, keyword_history, num) -> List[Dict]:
-        # contextual recommendation
-        if len(keyword_history) > 0:
-            extended_keyword_history = []
-            extended_keyword_history.extend(keyword_history)
-            for keyword in keyword_history:
-                w2v_related_keywords = self.word2vec_context.get_related_keywords([keyword], num=2)
-                extended_keyword_history.extend([w for w, v in w2v_related_keywords])
+    def _recommend(self, document: Document, queries: List[str] = [], num: int = 3) -> List[Dict]:
+        # preprocess queries
+        queries = [k.replace(' ', '') for k in queries]
 
-            search_pos_tokens = []
-            for keyword in extended_keyword_history:
-                keyword = simple_preprocess(keyword).replace(' ', '')
-                search_pos_tokens.extend(list(self.word2postoken[keyword]))
+        if len(queries) > 0: # contextual recommendation
+            # query extension (using word2vec)
+            extended_queries = list(queries)
+            #for queryword in queries:
+            #    w2v_related_keywords = self.word2vec_context.get_related_keywords([queryword], num=2)
+            #    extended_queries.extend([k for k, _ in w2v_related_keywords])
 
-            keywords = self.tfidf_context.get_related_keywords(document, search_pos_tokens)
-        else:
+            # convert to tokens (using predefined token dictionary)
+            query_tokens = sum([list(self.word2tokens[k]) for k in extended_queries], [])
+
+            # get related keywords
+            if len(query_tokens) > 0:
+                keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
+            else:
+                keywords = self.tfidf_context.get_keywords(document)
+        else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
 
-        keywords = [{'word': keyword, 'weight': weight} for keyword, weight in keywords if simple_preprocess(keyword).replace(' ', '') not in keyword_history]
+        # convert to dictionary format
+        keywords = [{'word': k, 'weight': w} for k, w in keywords if k not in queries]
 
         return keywords[:num]
 
@@ -144,24 +150,8 @@ class DummyExtractor(object):
     def __init__(self):
         super().__init__()
 
-    def recommend(self, document_id, keyword_history=[], num: int = 3, scenario={}):
-        """
-        Returns recommend keywords based on dummy scenario
+    def recommend(self, document_id, queries: List[str] = [], num: int = 3):
+        return [{'word': 'sample', 'weight': 0.7}]
 
-        ```python
-        {
-            'keyword1,keyword2': ['recommend-1', 'recommend-2'],
-            'keyword1,keyword2,keyword3': ['recommend-a', 'recommend-b'],
-            ...
-        }
-        ```
-        """
-        key = ','.join(keyword_history)
-
-        if key in scenario:
-            return scenario[key][:num]
-
-        return []
-
-    def recommend_from_sentences(self, sentences: List[str], keyword_history=[], num: int = 3) -> List[Dict]:
-        return []
+    def recommend_from_sentences(self, sentences: List[str], queries: List[str] = [], num: int = 3) -> List[Dict]:
+        return [{'word': 'sample', 'weight': 0.7}]

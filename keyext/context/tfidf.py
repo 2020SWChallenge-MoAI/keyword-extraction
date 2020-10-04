@@ -3,8 +3,6 @@ import logging
 import numpy as np
 
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-from scipy.sparse import vstack
 
 from typing import *
 from collections import defaultdict
@@ -28,7 +26,9 @@ class TfidfContext(Context):
         self.count_vectorizer = CountVectorizer(
             ngram_range=(1, 3),
             tokenizer=self.tokenizer,
-            lowercase=False
+            lowercase=False,
+            max_df=0.5
+            #stop_words=[PosValidator.INVALID_TOKEN]
         )
         self.tfidf_transformer = TfidfTransformer()
 
@@ -61,12 +61,9 @@ class TfidfContext(Context):
 
     def build(self, documents: List[Document]):
         # build document-wide vectors
-        logger.info(
-            'start count vectorization and tfidf transformation. this may take a while...')
+        logger.info('start count vectorization and tfidf transformation. this may take a while...')
 
-        count_vectors = self.count_vectorizer.fit_transform(
-            [doc.pos_tokens() for doc in documents]
-        )
+        count_vectors = self.count_vectorizer.fit_transform([doc.tokens() for doc in documents])
         self.tfidf_transformer.fit(count_vectors)
         logger.info('count vectorization and tfidf transformation complete')
 
@@ -86,78 +83,67 @@ class TfidfContext(Context):
 
     def _build_document_context(self, document: Document, count_vector=None):
         if count_vector is None:
-            count_vector = self.count_vectorizer.transform(
-                [document.pos_tokens()])[0]
+            count_vector = self.count_vectorizer.transform([document.tokens()])[0]
+
         tfidf_vector = self.tfidf_transformer.transform(count_vector)
 
-        sentence_vectors = [self.count_vectorizer.transform(
-            [sent.pos_tokens()])[0] for sent in document.sentences]
+        sentence_matrix = self.count_vectorizer.transform([sent.tokens() for sent in document.sentences])
+        sentence_matrix = self.tfidf_transformer.transform(sentence_matrix)
+        cooccurence_matrix = (sentence_matrix.T * sentence_matrix)
+        cooccurence_matrix.setdiag(0)
 
         keywords = sorted([
-            (weight, self.idx2vocab[idx])
+            (self.idx2vocab[idx], weight)
             for idx, weight
             in enumerate(tfidf_vector.toarray().squeeze())
             if weight > 0
-        ], reverse=True)
+        ], key=lambda k: -k[1])
 
         return {
             'count_vector': count_vector,
             'tfidf_vector': tfidf_vector,
-            'sentence_vectors': sentence_vectors,
+            'sentence_matrix': sentence_matrix,
+            'cooccurence_matrix': cooccurence_matrix,
             'keywords': keywords
         }
 
-    def get_keywords(self, document: Document):
+    def _get_document_context(self, document:Document):
         if not self._initialized:
             raise Exception('Tfidf context is not initialized.')
 
-        # no contextual information
         if not document.id or not document.id in self.contexts:
-            document_context = self._build_document_context(document)
+            return self._build_document_context(document)
         else:
-            document_context = self.contexts[document.id]
+            return self.contexts[document.id]
 
-        keywords = document_context['keywords']
+    def get_keywords(self, document: Document):
+        document_context = self._get_document_context(document)
+
+        keywords = defaultdict(float)
+        for keyword, weight in document_context['keywords']:
+            if PosValidator.is_valid(keyword):
+                word = PosTokenizer.word(keyword)
+                keywords[word] = max(keywords[word], weight)
+
+        return list(keywords.items())
+
+    def get_related_keywords(self, document, tokens: List[str]):
+        document_context = self._get_document_context(document)
+        
+        query_token = tokens[-1]
+        cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[query_token]]
+
+        keywords = sorted([
+            (self.idx2vocab[idx], weight)
+            for idx, weight
+            in enumerate(cooccurence_vector.toarray().squeeze())
+            if weight > 0
+        ], key=lambda k: -k[1])
 
         filtered_keywords = defaultdict(float)
-        for weight, keyword in keywords:
-            if PosValidator.is_valid(keyword):
-                word = PosTokenizer.text(keyword)
+        for keyword, weight in keywords:
+            if PosValidator.is_valid(keyword) and not PosTokenizer.contains(keyword, query_token):
+                word = PosTokenizer.word(keyword)
                 filtered_keywords[word] = max(filtered_keywords[word], weight)
-
+        
         return list(filtered_keywords.items())
-
-    def get_related_keywords(self, document, pos_tokens: List[str]):
-        if not self._initialized:
-            raise Exception('Tfidf context is not initialized.')
-
-        if not document.id or not document.id in self.contexts:
-            document_context = self._build_document_context(document)
-        else:
-            document_context = self.contexts[document.id]
-
-        result = defaultdict(float)
-
-        # build search vector (count based bag-of-word vector)
-        search_vector = np.zeros((1, len(self.idx2vocab)), dtype=np.int64)
-        for token in pos_tokens:
-            if token in self.vocab2idx:
-                search_vector[0][self.vocab2idx[token]] = 1
-
-        # search by cosine similarity
-        similarity = cosine_similarity(search_vector, vstack(
-            [v for v in document_context['sentence_vectors']]))
-
-        similar_sentences = [(sim, document.sentences[idx])
-                             for idx, sim
-                             in enumerate(similarity.squeeze())
-                             if sim > 0]
-        similar_sentences = sorted(similar_sentences, key=lambda x: -x[0])
-
-        # add results
-        for sim, sentence in similar_sentences:
-            for pos_token in sentence.pos_tokens():
-                if PosValidator.is_valid(pos_token):
-                    result[pos_token] += sim
-
-        return sorted([(PosTokenizer.text(k), v) for k, v in result.items()], key=lambda x: -x[1])

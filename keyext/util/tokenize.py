@@ -8,42 +8,45 @@ from . import simple_preprocess
 
 
 class PosTokenizer(object):
+
     def __init__(self, tagger=Komoran()):
         self.tagger = tagger
 
     def tokenize(self, sent):
         tokens = self.tagger.pos(simple_preprocess(sent))
-        pos_tokens = [f'{word}/{tag or "NA"}' for word, tag in tokens]
-        text_tokens = [word for word, _ in tokens]
+        tokens = [f'{word}/{tag or "NA"}' for word, tag in tokens]
 
-        return {
-            'pos': pos_tokens,
-            'text': text_tokens
-        }
+        return tokens
 
     @staticmethod
-    def subtokens(pos_token: str) -> Tuple[str]:
-        tokens = re.findall(r'[ㄱ-ㅎ가-힣A-Za-z0-9]+(?:\s[ㄱ-ㅎ가-힣A-Za-z0-9]+)*\/\w+', pos_token)
-        if not tokens:
-            print(f'{pos_token}->{tokens}')
+    def subtokens(token: str) -> Tuple[str]:
+        tokens = re.findall(r'(?:[ㄱ-ㅎ가-힣A-Za-z0-9]+(?:\s[ㄱ-ㅎ가-힣A-Za-z0-9]+)*|_)\/\w+', token)
         return tuple([tuple(t.split('/')) for t in tokens])
 
     @staticmethod
-    def text(pos_token: str) -> str:
-        return ' '.join([word for word, _ in PosTokenizer.subtokens(pos_token)])
+    def word(token: str) -> str:
+        return ''.join([word for word, tag in PosTokenizer.subtokens(token) if tag != 'NA'])
 
     @staticmethod
-    def joinedtext(pos_token: str) -> str:
-        return ''.join([word for word, _ in PosTokenizer.subtokens(pos_token)])
+    def contains(token1: str, token2: str) -> bool:
+        token1_subtokens = PosTokenizer.subtokens(token1)
+        token2_subtokens = PosTokenizer.subtokens(token2)
 
+        for word1, _ in token1_subtokens:
+            for word2, _ in token2_subtokens:
+                if word1 == word2:
+                    return True
+
+        return False
 
 class PosValidator(object):
-    VALID_TAGS = ('NNP', 'NNG', 'XR', 'XP', 'XSN', 'S', 'NF')
+    VALID_TAGS = ('NNP', 'NNG', 'XR', 'S', 'NF')
     VALID_INDEPENDENT_TAGS = ('NNP', 'NNG', 'XR', 'S', 'NF')
+    INVALID_TOKEN = '_/NA'
 
     @staticmethod
-    def is_valid(pos_token: str):
-        subtokens = PosTokenizer.subtokens(pos_token)
+    def is_valid(token: str):
+        subtokens = PosTokenizer.subtokens(token)
         if len(subtokens) == 1:  # single
             return subtokens[0][1].startswith(PosValidator.VALID_INDEPENDENT_TAGS)
         else:
@@ -51,19 +54,21 @@ class PosValidator(object):
                 return False
             if len(set(subtokens)) <= 1:
                 return False
-            
-            return True
+        return True
 
+    @staticmethod
+    def filter(tokens: List[str]):
+        return [token if PosValidator.is_valid(token) else PosValidator.INVALID_TOKEN for token in tokens]
 
-class NgramMerger(object):
+class NgramTokenizer(object):
     @staticmethod
     def build_ngram_context(document: Document, max_ngram=4, delta=3, num=20):
-        doc_tokens = [sent.pos_tokens() for sent in document.sentences]
+        doc_tokens = [sent.tokens() for sent in document.sentences]
 
         ngram_counter = defaultdict(int)
         for sent_tokens in doc_tokens:
             for n in range(1, max_ngram + 1):
-                for ngram in NgramMerger._ngrams(sent_tokens, n):
+                for ngram in NgramTokenizer._ngrams(sent_tokens, n):
                     ngram_counter[ngram] += 1
 
         ngrams_ = {}
@@ -83,34 +88,26 @@ class NgramMerger(object):
         return ngrams__
 
     @staticmethod
-    def merge_ngram(sentence: Sentence, ngram_context, max_ngram=4):
-        pos_tokens = sentence.pos_tokens()
-        text_tokens = sentence.text_tokens()
-
-        pos_tokens_ = []
-        text_tokens_ = []
+    def tokenize(sentence: Sentence, ngram_context, max_ngram=4):
+        tokens = sentence.tokens()
+        tokens_ = []
 
         i = 0
-        while i < len(pos_tokens):
+        while i < len(tokens):
             ngrams = []
             for n in range(1, max_ngram+1):
-                ngrams.append(tuple(pos_tokens[i:i+n]))
+                ngrams.append(tuple(tokens[i:i+n]))
             ngrams = list(filter(lambda x: x in ngram_context, ngrams))
 
             if len(ngrams) == 0:
-                pos_tokens_.append(pos_tokens[i])
-                text_tokens_.append(text_tokens[i])
+                tokens_.append(tokens[i])
                 i += 1
             else:
                 ngram_size = len(sorted(ngrams, key=lambda x: -len(x))[0])
-                pos_tokens_.append('-'.join(pos_tokens[i:i+ngram_size]))
-                text_tokens_.append('-'.join(text_tokens[i:i+ngram_size]))
+                tokens_.append('-'.join(tokens[i:i+ngram_size]))
                 i += ngram_size
 
-        return {
-            'pos': pos_tokens_,
-            'text': text_tokens_
-        }
+        return tokens_
 
     @staticmethod
     def _ngrams(tokens, n):
