@@ -30,11 +30,11 @@ class KeywordExtractor(object):
                 documents = pickle.load(f)
                 word2tokens = pickle.load(f)
 
-            if models['tfidf']:
+            if 'tfidf' in models:
                 self.tfidf_context.import_model(models['tfidf'])
-            if models['word2vec']:
+            if 'word2vec' in models:
                 self.word2vec_context.import_model(models['word2vec'])
-            if models['ner']:
+            if 'ner' in models:
                 self.ner_context.import_model(models['ner'])
 
             self.documents = documents
