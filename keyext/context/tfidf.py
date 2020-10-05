@@ -128,22 +128,23 @@ class TfidfContext(Context):
         return list(keywords.items())
 
     def get_related_keywords(self, document, tokens: List[str]):
+        if not tokens:
+            return []
+
         document_context = self._get_document_context(document)
         
-        query_token = tokens[-1]
-        cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[query_token]]
+        keywords = defaultdict(float)
+        for token in tokens:
+            cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[token]]
 
-        keywords = sorted([
-            (self.idx2vocab[idx], weight)
-            for idx, weight
-            in enumerate(cooccurence_vector.toarray().squeeze())
-            if weight > 0
-        ], key=lambda k: -k[1])
-
-        filtered_keywords = defaultdict(float)
-        for keyword, weight in keywords:
-            if PosValidator.is_valid(keyword) and not PosTokenizer.contains(keyword, query_token):
-                word = PosTokenizer.word(keyword)
-                filtered_keywords[word] = max(filtered_keywords[word], weight)
+            for keyword, weight in sorted([
+                (self.idx2vocab[idx], weight)
+                for idx, weight
+                in enumerate(cooccurence_vector.toarray().squeeze())
+                if weight > 0
+            ]):
+                if PosValidator.is_valid(keyword) and not PosTokenizer.contains(keyword, token):
+                    word = PosTokenizer.word(keyword)
+                    keywords[word] = max(keywords[word], weight)
         
-        return list(filtered_keywords.items())
+        return sorted(list(keywords.items()), key=lambda k: -k[1])
