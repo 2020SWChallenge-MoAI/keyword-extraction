@@ -1,10 +1,12 @@
 import re
 from krwordrank.hangle import normalize
 
-from ._model import *
+from ..model import *
 
+def simple_preprocess(raw_document):
+    return normalize(raw_document, english=True, number=True, remove_repeat=3)
 
-def preprocess(raw_document, english=False, number=False):
+def preprocess(raw_document, english=True, number=True):
     """
     Processes raw document to preprocessed sentences.
 
@@ -17,8 +19,8 @@ def preprocess(raw_document, english=False, number=False):
 
     - raw_document: document contents
     - author: document author. (optional)
-    - english: if `True`, english words are included in preprocessed sentences. default: `False`
-    - number: if `True`, numbers are included in preprocessed sentences. default: `False`
+    - english: if `True`, english words are included in preprocessed sentences. default: `True`
+    - number: if `True`, numbers are included in preprocessed sentences. default: `True`
 
     ### Convert Example
     점순이는 "너 봄春 감자가 맛있단다. 느(너희) 집엔 이거 없지?" 하며 나를 놀렸습니다.
@@ -56,7 +58,7 @@ def preprocess(raw_document, english=False, number=False):
     document = new_document
 
     # split and normalize sentences by period
-    sents = [normalize(sent) for sent in document.split('.')]
+    sents = [normalize(sent, english=english, number=number, remove_repeat=3) for sent in document.split('.')]
     sents = [sent for sent in sents if sent != '']
 
     return sents

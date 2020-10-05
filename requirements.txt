@@ -1,4 +1,4 @@
 scikit-learn>=0.23
 konlpy>=0.5
 krwordrank>=1.0
-gensim
+gensim>=3.8.3
