@@ -133,18 +133,22 @@ class TfidfContext(Context):
 
         document_context = self._get_document_context(document)
         
-        keywords = defaultdict(float)
+        cooccurence_vector = None
         for token in tokens:
-            cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[token]]
+            if cooccurence_vector is None:
+                cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[token]]
+            else:
+                cooccurence_vector += document_context['cooccurence_matrix'][self.vocab2idx[token]]
 
-            for keyword, weight in sorted([
-                (self.idx2vocab[idx], weight)
-                for idx, weight
-                in enumerate(cooccurence_vector.toarray().squeeze())
-                if weight > 0
-            ]):
-                if PosValidator.is_valid(keyword) and not PosTokenizer.contains(keyword, token):
-                    word = PosTokenizer.word(keyword)
-                    keywords[word] = max(keywords[word], weight)
+        keywords = defaultdict(float)
+        for keyword, weight in sorted([
+            (self.idx2vocab[idx], weight)
+            for idx, weight
+            in enumerate(cooccurence_vector.toarray().squeeze())
+            if weight > 0
+        ]):
+            if PosValidator.is_valid(keyword) and not all([PosTokenizer.contains(keyword, token) for token in tokens]):
+                word = PosTokenizer.word(keyword)
+                keywords[word] = max(keywords[word], weight)
         
         return sorted(list(keywords.items()), key=lambda k: -k[1])
