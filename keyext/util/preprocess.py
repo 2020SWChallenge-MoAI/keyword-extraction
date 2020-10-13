@@ -1,12 +1,22 @@
 import re
-from krwordrank.hangle import normalize
 
 from ..model import *
 
-def simple_preprocess(raw_document):
-    return normalize(raw_document, english=True, number=True, remove_repeat=3)
+pattern = re.compile(r'[^ㄱ-ㅎ가-힣\w]')
+spaces_pattern = re.compile(r'\s+')
+repeatchars_pattern = re.compile(r'([ㄱ-ㅎ가-힣\w])\1{3,}')
 
-def preprocess(raw_document, english=True, number=True):
+def token_preprocess(raw_token):
+    return simple_preprocess(raw_token).replace(' ', '')
+
+def simple_preprocess(raw_document):
+    doc = repeatchars_pattern.sub(r'\1' * 3, raw_document)
+    doc = pattern.sub(' ', doc)
+    doc = spaces_pattern.sub(' ', doc).strip()
+
+    return doc
+
+def preprocess(raw_document):
     """
     Processes raw document to preprocessed sentences.
 
@@ -18,9 +28,6 @@ def preprocess(raw_document, english=True, number=True):
     ### Arguments
 
     - raw_document: document contents
-    - author: document author. (optional)
-    - english: if `True`, english words are included in preprocessed sentences. default: `True`
-    - number: if `True`, numbers are included in preprocessed sentences. default: `True`
 
     ### Convert Example
     점순이는 "너 봄春 감자가 맛있단다. 느(너희) 집엔 이거 없지?" 하며 나를 놀렸습니다.
@@ -58,7 +65,7 @@ def preprocess(raw_document, english=True, number=True):
     document = new_document
 
     # split and normalize sentences by period
-    sents = [normalize(sent, english=english, number=number, remove_repeat=3) for sent in document.split('.')]
+    sents = [simple_preprocess(sent) for sent in document.split('.')]
     sents = [sent for sent in sents if sent != '']
 
     return sents
