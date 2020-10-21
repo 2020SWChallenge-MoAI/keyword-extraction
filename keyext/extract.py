@@ -7,6 +7,8 @@ from collections import defaultdict
 from .context import *
 from .model import *
 from .util import NgramTokenizer, PosTokenizer, PosValidator
+from .util import token_preprocess
+from .util import same_cheon
 
 
 logger = logging.getLogger(__name__)
@@ -119,31 +121,41 @@ class KeywordExtractor(object):
         return self._recommend(document, queries, num)
 
     def _recommend(self, document: Document, queries: List[str] = [], num: int = 3) -> List[Dict]:
-        # preprocess queries
-        queries = [k.replace(' ', '') for k in queries]
+        def filter_subwords(keywords):
+            valid = [True for _ in range(len(keywords))]
+            for i, (k, _) in enumerate(keywords):
+                for kk, _ in keywords[i+1:i+6]:
+                    if k in kk:
+                        valid[i] = False
+                for kk, _ in keywords[max(0,i-5):i]:
+                    if k in kk:
+                        valid[i] = False
 
-        if len(queries) > 0: # contextual recommendation
-            # query extension (using word2vec)
-            extended_queries = list(queries)
-            #for queryword in queries:
-            #    w2v_related_keywords = self.word2vec_context.get_related_keywords([queryword], num=2)
-            #    extended_queries.extend([k for k, _ in w2v_related_keywords])
+            return [k for k, v in zip(keywords, valid) if v]
 
-            # convert to tokens (using predefined token dictionary)
-            query_tokens = sum([list(self.word2tokens[k]) for k in extended_queries], [])
+        def correct_weights(keywords):
+            ner_keywords = self.ner_context.get_keywords(document)
+            for i, (k, w) in enumerate(keywords):
+                ner_matched = 0
+                for kk, ww in ner_keywords:
+                    if same_cheon(k, kk):
+                        ner_matched += ww
+                
+                if not ner_matched:
+                    keywords[i] = (k, w * 0.5)
 
-            # get related keywords
-            if len(query_tokens) > 0:
-                keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
-            else:
-                keywords = self.tfidf_context.get_keywords(document)
+            return sorted(keywords, key=lambda k: -k[1])
+
+        # preprocess and convert to tokens (using predefined token dictionary)
+        query_tokens = sum([list(self.word2tokens[token_preprocess(k)]) for k in queries], [])
+
+        if len(query_tokens) > 0: # get related keywords
+            keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
         else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
 
-        # convert to dictionary format
-        keywords = [{'word': k, 'weight': w} for k, w in keywords if k not in queries]
-
-        return keywords[:num]
+        # convert to dictionary format and return
+        return [{'word': k, 'weight': w} for k, w in filter_subwords(keywords) if k not in queries][:num]
 
 
 class DummyExtractor(object):
