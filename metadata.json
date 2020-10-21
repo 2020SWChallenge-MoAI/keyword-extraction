@@ -1,9 +1,9 @@
 {
     "name": "keyext",
-    "version": "1.2.0",
+    "version": "1.2.3",
     "author": "Junhyun Kim",
     "author_email": "me@junbread.win",
     "url": "https://github.com/2020swchallenge-moai/keyword-extraction",
     "description": "Keyword extraction based on statistical methods",
-    "install_requires": ["scikit-learn>=0.23", "krwordrank>=1.0", "konlpy>=0.5", "gensim>=3.8.3"]
+    "install_requires": ["scikit-learn>=0.23", "konlpy>=0.5", "gensim>=3.8.3"]
 }

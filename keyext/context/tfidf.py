@@ -31,6 +31,7 @@ class TfidfContext(Context):
             #stop_words=[PosValidator.INVALID_TOKEN]
         )
         self.tfidf_transformer = TfidfTransformer()
+        self.contexts = {}
 
         self._initialized = False
 
@@ -41,7 +42,7 @@ class TfidfContext(Context):
         self.tfidf_transformer = data['tfidf_transformer']
         self.vocab2idx = data['vocab2idx']
         self.idx2vocab = data['idx2vocab']
-        self.contexts = data['contexts']
+        # self.contexts = data['contexts']
 
         self._initialized = True
 
@@ -54,7 +55,7 @@ class TfidfContext(Context):
             'tfidf_transformer': self.tfidf_transformer,
             'vocab2idx': self.vocab2idx,
             'idx2vocab': self.idx2vocab,
-            'contexts': self.contexts
+            # 'contexts': {} self.contexts
         })
 
         return data
@@ -72,12 +73,11 @@ class TfidfContext(Context):
         self.vocab2idx = self.count_vectorizer.vocabulary_
         logger.info('vocab generation complete')
 
-        logger.info(f'start build context [0/{len(documents)}]')
-        self.contexts = {}
-        for i, (doc, count_vector) in enumerate(zip(documents, count_vectors)):
-            context = self._build_document_context(doc, count_vector)
-            self.contexts[doc.id] = context
-            logger.info(f'done [{i+1}/{len(documents)}]')
+        # logger.info(f'start build context [0/{len(documents)}]')
+        # for i, (doc, count_vector) in enumerate(zip(documents, count_vectors)):
+        #     context = self._build_document_context(doc, count_vector)
+        #     self.contexts[doc.id] = context
+        #     logger.info(f'done [{i+1}/{len(documents)}]')
 
         self._initialized = True
 
@@ -112,7 +112,9 @@ class TfidfContext(Context):
             raise Exception('Tfidf context is not initialized.')
 
         if not document.id or not document.id in self.contexts:
-            return self._build_document_context(document)
+            context = self._build_document_context(document)
+            self.contexts[document.id] = context
+            return context
         else:
             return self.contexts[document.id]
 
@@ -133,18 +135,22 @@ class TfidfContext(Context):
 
         document_context = self._get_document_context(document)
         
-        keywords = defaultdict(float)
+        cooccurence_vector = None
         for token in tokens:
-            cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[token]]
+            if cooccurence_vector is None:
+                cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[token]]
+            else:
+                cooccurence_vector += document_context['cooccurence_matrix'][self.vocab2idx[token]]
 
-            for keyword, weight in sorted([
-                (self.idx2vocab[idx], weight)
-                for idx, weight
-                in enumerate(cooccurence_vector.toarray().squeeze())
-                if weight > 0
-            ]):
-                if PosValidator.is_valid(keyword) and not PosTokenizer.contains(keyword, token):
-                    word = PosTokenizer.word(keyword)
-                    keywords[word] = max(keywords[word], weight)
+        keywords = defaultdict(float)
+        for keyword, weight in sorted([
+            (self.idx2vocab[idx], weight)
+            for idx, weight
+            in enumerate(cooccurence_vector.toarray().squeeze())
+            if weight > 0
+        ]):
+            if PosValidator.is_valid(keyword) and not all(PosTokenizer.contains(keyword, token) for token in tokens):
+                word = PosTokenizer.word(keyword)
+                keywords[word] = max(keywords[word], weight)
         
         return sorted(list(keywords.items()), key=lambda k: -k[1])
