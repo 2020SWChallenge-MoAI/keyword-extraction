@@ -111,7 +111,7 @@ class TfidfContext(Context):
         if not self._initialized:
             raise Exception('Tfidf context is not initialized.')
 
-        if not document.id or not document.id in self.contexts:
+        if not document.id or document.id == Document.TEMP_ID or not document.id in self.contexts:
             context = self._build_document_context(document)
             self.contexts[document.id] = context
             return context
