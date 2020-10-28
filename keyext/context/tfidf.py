@@ -113,7 +113,9 @@ class TfidfContext(Context):
 
         if not document.id or document.id == Document.TEMP_ID or not document.id in self.contexts:
             context = self._build_document_context(document)
-            self.contexts[document.id] = context
+
+            if not Document.TEMP_ID:
+                self.contexts[document.id] = context
             return context
         else:
             return self.contexts[document.id]
