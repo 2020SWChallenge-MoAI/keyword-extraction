@@ -12,12 +12,12 @@ class Word2VecContext(Context):
     def __init__(self):
         self._initialized = False
 
-    def import_model(self, model: bytes):
-        self.model = pickle.loads(model)
+    def import_model(self, f) -> None:
+        self.model = pickle.load(f)
         self._initialized = True
 
-    def export_model(self) -> bytes:
-        return pickle.dumps(self.model)
+    def export_model(self, f) -> None:
+        return pickle.dump(self.model, f)
 
     def build(self, documents: List[Document]):
         sentences = sum([doc.sentences for doc in documents], [])
