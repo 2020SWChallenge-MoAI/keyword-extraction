@@ -1,5 +1,7 @@
+from pickle import TRUE
 import re
 import requests
+import pickle
 from typing import *
 from collections import defaultdict
 
@@ -16,41 +18,50 @@ class NerContext(Context):
         self._initialized = False
 
     def import_model(self, model: bytes) -> None:
-        pass
+        self.contexts = pickle.loads(model)
+        self._initialized = True
 
     def export_model(self) -> bytes:
         pass
+    
+    @staticmethod
+    def request_api(document: str):
+        keywords = []
+        res = requests.post(API_SERVER_URL, json={ 'text': document})
+        if res.ok:
+            keywords = res.json()['ners']
+
+        return keywords
 
     def get_keywords(self, document: Document) -> List[Tuple[str,str]]:
-        keywords = []
-
-        res = requests.post(API_SERVER_URL, json={ 'text': document.text() })
-        if res.ok:
-            keywords = res.json()['ners']
-
-        return [(tag, word) for tag, word in keywords]
+        if self._initialized and document.id in self.contexts:
+            return self.contexts[document.id]['all']
+        
+        else: # API request
+            return [(tag, word) for (tag, word) in self.request_api(document.text())]
 
     def get_related_keywords(self, document: Document, queries: List[str]) -> List[Tuple[str,str]]:
-        related_sentences = []
+        queries = [re.sub('[^\w]', '', x) for x in queries]
+        sentences = [re.sub('[^\w]', '', sentence.text()) for sentence in document.sentences]
+
+        related_sentence_ids = []
 
         # find all sentences containing all queries
-        for sentence in document.sentences:
-            if all(x in re.sub('[^\w]','',sentence.text()) for x in queries):
-                related_sentences.append(sentence.text())
-
-        # find all sentences containing last queries if there are no sentences
-        if len(related_sentences)==0 or (len(queries)>=3 and len(related_sentences)<=5): 
-            for sentence in document.sentences:
-                if any(x in re.sub('[^\w]','',sentence.text()) for x in queries[-1]):
-                    related_sentences.append(sentence.text())
-
-        related_sentences = "\n".join(related_sentences)
-
-        keywords = []
-        res = requests.post(API_SERVER_URL, json={ 'text': related_sentences })
-        if res.ok:
-            keywords = res.json()['ners']
-
-        return [(tag, word) for tag, word in keywords if word not in queries]
+        for sentence_id, sentence in enumerate(sentences): 
+            if all(x in sentence for x in queries):
+                related_sentence_ids.append(sentence_id)
         
+        # find all sentences containing last queries if there are no sentences
+        if len(related_sentence_ids)==0 or (len(queries)>=3 and len(related_sentence_ids)<=5):
+            for sentence_id, sentence in enumerate(sentences):
+                if queries[-1] in sentence:
+                    related_sentence_ids.append(sentence_id)
+        
+        if self._initialized and document.id in self.contexts:
+            ners = sum([self.contexts[document.id]['by_sentence'][sentence_id] for sentence_id in related_sentence_ids],[])
+        else:
+            all_sentences = "\n".join([document.sentences[sentence_id] for sentence_id in related_sentence_ids])
+            ners = self.request_api(all_sentences)
+
+        return [ner for ner in ners if re.sub('[^\w]','',ner) not in queries]
 

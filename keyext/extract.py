@@ -1,6 +1,7 @@
-from contextlib import suppress
+import re
 import pickle
 import logging
+import random
 
 from typing import *
 from collections import defaultdict, Counter
@@ -124,15 +125,16 @@ class KeywordExtractor(object):
     def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
-            for i, (k, _) in enumerate(keywords):
-                for kk, _ in keywords[i+1:i+6]:
-                    if k in kk:
-                        valid[i] = False
-                for kk, _ in keywords[max(0,i-5):i]:
-                    if k in kk:
-                        valid[i] = False
+            raw_keywords = [re.sub('[^\w]','',k) for k, _ in keywords]
+            for i in range(len(raw_keywords[:num])):
+                for j in range(len(raw_keywords[:num])):
+                    if i==j:
+                        continue
+                    if (raw_keywords[j] in raw_keywords[i]) and valid[i]:
+                        valid[j] = False
+                        keywords[i] = (keywords[i][0], max(keywords[i][1],keywords[j][1]))
 
-            return [k for k, v in zip(keywords, valid) if v]
+            return sorted([k for k, v in zip(keywords, valid) if v], key=lambda x: -x[1])
 
         def correct_weights(keywords):
             ner_keywords = self.ner_context.get_keywords(document)
@@ -147,11 +149,9 @@ class KeywordExtractor(object):
 
             return sorted(keywords, key=lambda k: -k[1])
 
-        def combine_ner_and_keywords(keywords, counter, lower_bound):
-            lower_w = 0 if len(keywords)==0 else keywords[min(len(keywords)-1,lower_bound)][1]
-            ner_keywords = sorted([(ner[1], count) for ner, count in counter.items()], key=lambda x: -x[1]) # sort by count
-            for i, (k, c) in enumerate(ner_keywords):
-                ner_keywords[i] = (k, c*0.01+lower_w)
+        def combine_ner_and_keywords(keywords, counter):
+            base_weight = 0 if len(keywords)==0 else keywords[-1][1]
+            ner_keywords = [(ner[1], count*random.uniform(0.1, 0.2) + base_weight) for ner, count in counter.items()][:int(num/2)]
 
             d = dict(keywords)
             d.update(ner_keywords)
@@ -161,19 +161,19 @@ class KeywordExtractor(object):
 
         # preprocess and convert to tokens (using predefined token dictionary)
         query_tokens = sum([list(self.word2tokens[token_preprocess(k)]) for k in queries], [])
-
         if len(query_tokens) > 0: # get related keywords
             keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
-            ner_keywords = self.ner_context.get_related_keywords(document, [token_preprocess(k) for k in queries])
-            keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords), lower_bound=int(num*0.4))
-
         else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
+
+        if len(queries) > 0:
+            ner_keywords = self.ner_context.get_related_keywords(document, [token_preprocess(k) for k in queries])
+            keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords))
 
         if len(tags) > 0: # get keywords related to ner tags
             ner_keywords = self.ner_context.get_keywords(document)
             counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
-            keywords = combine_ner_and_keywords(keywords, counter, lower_bound=int(num*0.2))
+            keywords = combine_ner_and_keywords(keywords, counter)
 
         # convert to dictionary format and return
         return [{'word': k, 'weight': w} for k, w in filter_subwords(keywords) if k not in queries][:num]
