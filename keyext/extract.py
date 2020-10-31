@@ -124,18 +124,15 @@ class KeywordExtractor(object):
     def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
-            for i, (k, w) in enumerate(keywords):
-                for j , (kk, ww) in enumerate(keywords[i+1:i+6]):
+            for i, (k, _) in enumerate(keywords):
+                for kk, _ in keywords[i+1:i+6]:
                     if k in kk:
-                        keywords[j+i+1] = (kk, ww)
+                        valid[i] = False
+                for kk, _ in keywords[max(0,i-5):i]:
+                    if k in kk:
                         valid[i] = False
 
-                for j, (kk, ww) in enumerate(keywords[max(0,i-5):i]):
-                    if k in kk:
-                        keywords[j+max(0,i-5)] = (kk, ww)
-                        valid[i] = False
-
-            return sorted([k for k, v in zip(keywords, valid) if v], key=lambda x:-x[1])
+            return [k for k, v in zip(keywords, valid) if v]
 
         def correct_weights(keywords):
             ner_keywords = self.ner_context.get_keywords(document)
