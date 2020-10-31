@@ -145,21 +145,8 @@ class KeywordExtractor(object):
 
             return sorted([k for k, v in zip(keywords, valid) if v], key=lambda x: -x[1])
 
-        def correct_weights(keywords):
-            ner_keywords = self.ner_context.get_keywords(document)
-            for i, (k, w) in enumerate(keywords):
-                ner_matched = 0
-                for kk, ww in ner_keywords:
-                    if same_cheon(k, kk):
-                        ner_matched += ww
-                
-                if not ner_matched:
-                    keywords[i] = (k, w * 0.5)
-
-            return sorted(keywords, key=lambda k: -k[1])
-
         def combine_ner_and_keywords(keywords, counter):
-            base_weight = 0 if len(keywords)==0 else keywords[-1][1]
+            base_weight = 0 if len(keywords)==0 else keywords[:num - 1][-1][1]
             ner_keywords = [(ner[1], count*random.uniform(0.1, 0.2) + base_weight) for ner, count in counter.items()][:int(num/2)]
 
             d = dict(keywords)
@@ -169,14 +156,16 @@ class KeywordExtractor(object):
 
 
         # preprocess and convert to tokens (using predefined token dictionary)
-        query_tokens = sum([list(self.word2tokens[token_preprocess(k)]) for k in queries], [])
+        preprocessed_queries = [token_preprocess(k) for k in queries]
+        query_tokens = sum([list(self.word2tokens[k]) for k in preprocessed_queries], [])
+
         if len(query_tokens) > 0: # get related keywords
             keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
         else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
 
         if len(queries) > 0:
-            ner_keywords = self.ner_context.get_related_keywords(document, [token_preprocess(k) for k in queries])
+            ner_keywords = self.ner_context.get_related_keywords(document, preprocessed_queries)
             keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords))
 
         if len(tags) > 0: # get keywords related to ner tags
@@ -185,7 +174,7 @@ class KeywordExtractor(object):
             keywords = combine_ner_and_keywords(keywords, counter)
 
         # convert to dictionary format and return
-        return [{'word': k, 'weight': w} for k, w in filter_subwords(keywords) if k not in queries][:num]
+        return [{'word': k, 'weight': w} for k, w in filter_subwords(keywords) if k not in preprocessed_queries][:num]
 
 
 class DummyExtractor(object):
