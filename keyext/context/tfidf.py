@@ -139,6 +139,8 @@ class TfidfContext(Context):
         
         cooccurence_vector = None
         for token in tokens:
+            if not token in self.vocab2idx:
+                continue
             if cooccurence_vector is None:
                 cooccurence_vector = document_context['cooccurence_matrix'][self.vocab2idx[token]]
             else:

@@ -2,6 +2,7 @@ import re
 import pickle
 import logging
 import random
+import os
 
 from typing import *
 from collections import defaultdict, Counter
@@ -28,38 +29,44 @@ class KeywordExtractor(object):
             self.load(model_path)
 
     def load(self, model_path: str):
+        """
+            model_path should exclude extension
+        """
         try:
-            with open(model_path, 'rb') as f:
-                models = pickle.load(f)
-                documents = pickle.load(f)
-                word2tokens = pickle.load(f)
+            with open(f'{model_path}.metadata.pkl') as f:
+                self.documents = pickle.load(f)
+                self.word2tokens = pickle.load(f)
 
-            if 'tfidf' in models:
-                self.tfidf_context.import_model(models['tfidf'])
-            if 'word2vec' in models:
-                self.word2vec_context.import_model(models['word2vec'])
-            if 'ner' in models:
-                self.ner_context.import_model(models['ner'])
+            for (context_name, context) in [('tfidf', self.tfidf_context), ('word2vec', self.word2vec_context), ('ner', self.ner_context)]:
+                context_path = f'{model_path}.{context_name}.pkl'
 
-            self.documents = documents
-            self.word2tokens = word2tokens
+                if not os.path.isfile(context_path):
+                    continue
+
+                with open(context_path, 'rb') as f:
+                    context.import_model(pickle.load(f))
         except:
             raise ValueError('model is not a valid file.')
 
     def save(self, model_path: str):
+        """
+            model_path should exclude extension
+        """
         try:
-            models = {}
-            if self.tfidf_context._initialized:
-                models['tfidf'] = self.tfidf_context.export_model()
-            if self.word2vec_context._initialized:
-                models['word2vec'] = self.word2vec_context.export_model()
-            if self.ner_context._initialized:
-                models['ner'] = self.ner_context.export_model()
-
-            with open(model_path, 'wb') as f:
-                pickle.dump(models, f)
+            with open(f'{model_path}.metadata.pkl', 'wb') as f:
                 pickle.dump(self.documents, f)
                 pickle.dump(self.word2tokens, f)
+
+            if self.tfidf_context._initialized:
+                with open(f'{model_path}.tfidf.pkl', 'wb') as f:
+                    pickle.dump(self.tfidf_context.export_model(), f)
+            if self.word2vec_context._initialized:
+                with open(f'{model_path}.word2vec.pkl', 'wb') as f:
+                    pickle.dump(self.word2vec_context.export_model(), f)
+            if self.ner_context._initialized:
+                with open(f'{model_path}.ner.pkl', 'wb') as f:
+                    pickle.dump(self.ner_context.export_model(), f)
+
         except:
             raise ValueError('error occured when saving model. check your model path.')
 
@@ -108,8 +115,10 @@ class KeywordExtractor(object):
 
                 subtokens = PosTokenizer.subtokens(token)
                 for word, _ in subtokens:
+                    if ' ' in word:
+                        for subword in word.split():
+                            self.word2tokens[subword].add(token)
                     self.word2tokens[word].add(token)
-
 
         logger.info(f'document {doc_id} converting complete')
         return document
