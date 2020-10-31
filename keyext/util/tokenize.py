@@ -62,7 +62,7 @@ class PosValidator(object):
 
 class NgramTokenizer(object):
     @staticmethod
-    def build_ngram_context(document: Document, max_ngram=4, delta=3, num=20):
+    def build_ngram_context(document: Document, max_ngram=4, delta=5, num=5):
         doc_tokens = [sent.tokens() for sent in document.sentences]
 
         ngram_counter = defaultdict(int)
