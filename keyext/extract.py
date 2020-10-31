@@ -1,8 +1,9 @@
+from contextlib import suppress
 import pickle
 import logging
 
 from typing import *
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from .context import *
 from .model import *
@@ -112,26 +113,29 @@ class KeywordExtractor(object):
         logger.info(f'document {doc_id} converting complete')
         return document
 
-    def recommend(self, document_id, queries: List[str] = [], num: int = 3) -> List[Dict]:
+    def recommend(self, document_id, queries: List[str] = [], tags: List[str]= [], num: int = 3) -> List[Dict]:
         document = self.documents[document_id]
-        return self._recommend(document, queries, num)
+        return self._recommend(document, queries, tags, num)
 
-    def recommend_from_sentences(self, sentences: List[str], queries: List[str] = [], num: int = 3) -> List[Dict]:
+    def recommend_from_sentences(self, sentences: List[str], queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
         document = self._build_document(Document.TEMP_ID, sentences)
-        return self._recommend(document, queries, num)
+        return self._recommend(document, queries, tags, num)
 
-    def _recommend(self, document: Document, queries: List[str] = [], num: int = 3) -> List[Dict]:
+    def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
-            for i, (k, _) in enumerate(keywords):
-                for kk, _ in keywords[i+1:i+6]:
+            for i, (k, w) in enumerate(keywords):
+                for j , (kk, ww) in enumerate(keywords[i+1:i+6]):
                     if k in kk:
-                        valid[i] = False
-                for kk, _ in keywords[max(0,i-5):i]:
-                    if k in kk:
+                        keywords[j+i+1] = (kk, ww)
                         valid[i] = False
 
-            return [k for k, v in zip(keywords, valid) if v]
+                for j, (kk, ww) in enumerate(keywords[max(0,i-5):i]):
+                    if k in kk:
+                        keywords[j+max(0,i-5)] = (kk, ww)
+                        valid[i] = False
+
+            return sorted([k for k, v in zip(keywords, valid) if v], key=lambda x:-x[1])
 
         def correct_weights(keywords):
             ner_keywords = self.ner_context.get_keywords(document)
@@ -146,13 +150,33 @@ class KeywordExtractor(object):
 
             return sorted(keywords, key=lambda k: -k[1])
 
+        def combine_ner_and_keywords(keywords, counter, lower_bound):
+            lower_w = 0 if len(keywords)==0 else keywords[min(len(keywords)-1,lower_bound)][1]
+            ner_keywords = sorted([(ner[1], count) for ner, count in counter.items()], key=lambda x: -x[1]) # sort by count
+            for i, (k, c) in enumerate(ner_keywords):
+                ner_keywords[i] = (k, c*0.01+lower_w)
+
+            d = dict(keywords)
+            d.update(ner_keywords)
+
+            return sorted(list(d.items()), key=lambda x:-x[1])
+
+
         # preprocess and convert to tokens (using predefined token dictionary)
         query_tokens = sum([list(self.word2tokens[token_preprocess(k)]) for k in queries], [])
 
         if len(query_tokens) > 0: # get related keywords
             keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
+            ner_keywords = self.ner_context.get_related_keywords(document, [token_preprocess(k) for k in queries])
+            keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords), lower_bound=int(num*0.4))
+
         else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
+
+        if len(tags) > 0: # get keywords related to ner tags
+            ner_keywords = self.ner_context.get_keywords(document)
+            counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
+            keywords = combine_ner_and_keywords(keywords, counter, lower_bound=int(num*0.2))
 
         # convert to dictionary format and return
         return [{'word': k, 'weight': w} for k, w in filter_subwords(keywords) if k not in queries][:num]
