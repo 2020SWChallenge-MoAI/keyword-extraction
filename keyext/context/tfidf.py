@@ -35,8 +35,8 @@ class TfidfContext(Context):
 
         self._initialized = False
 
-    def import_model(self, model: bytes):
-        data = pickle.loads(model)
+    def import_model(self, f) -> None:
+        data = pickle.load(f)
 
         self.count_vectorizer = data['count_vectorizer']
         self.tfidf_transformer = data['tfidf_transformer']
@@ -46,19 +46,17 @@ class TfidfContext(Context):
 
         self._initialized = True
 
-    def export_model(self) -> bytes:
+    def export_model(self, f) -> None:
         if not self._initialized:
             raise Exception('model is not initialized. nothing to export.')
 
-        data = pickle.dumps({
+        pickle.dump({
             'count_vectorizer': self.count_vectorizer,
             'tfidf_transformer': self.tfidf_transformer,
             'vocab2idx': self.vocab2idx,
             'idx2vocab': self.idx2vocab,
             # 'contexts': {} self.contexts
-        })
-
-        return data
+        }, f)
 
     def build(self, documents: List[Document]):
         # build document-wide vectors

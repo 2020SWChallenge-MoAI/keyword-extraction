@@ -33,7 +33,7 @@ class KeywordExtractor(object):
             model_path should exclude extension
         """
         try:
-            with open(f'{model_path}.metadata.pkl') as f:
+            with open(f'{model_path}.metadata.pkl', 'rb') as f:
                 self.documents = pickle.load(f)
                 self.word2tokens = pickle.load(f)
 
@@ -44,7 +44,7 @@ class KeywordExtractor(object):
                     continue
 
                 with open(context_path, 'rb') as f:
-                    context.import_model(pickle.load(f))
+                    context.import_model(f)
         except:
             raise ValueError('model is not a valid file.')
 
@@ -59,13 +59,13 @@ class KeywordExtractor(object):
 
             if self.tfidf_context._initialized:
                 with open(f'{model_path}.tfidf.pkl', 'wb') as f:
-                    pickle.dump(self.tfidf_context.export_model(), f)
+                    self.tfidf_context.export_model(f)
             if self.word2vec_context._initialized:
                 with open(f'{model_path}.word2vec.pkl', 'wb') as f:
-                    pickle.dump(self.word2vec_context.export_model(), f)
+                    self.word2vec_context.export_model(f)
             if self.ner_context._initialized:
                 with open(f'{model_path}.ner.pkl', 'wb') as f:
-                    pickle.dump(self.ner_context.export_model(), f)
+                    self.ner_context.export_model(f)
 
         except:
             raise ValueError('error occured when saving model. check your model path.')

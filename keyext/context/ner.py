@@ -17,12 +17,15 @@ class NerContext(Context):
         super().__init__()
         self._initialized = False
 
-    def import_model(self, model: bytes) -> None:
-        self.contexts = pickle.loads(model)
+    def import_model(self, f) -> None:
+        self.contexts = pickle.load(f)
         self._initialized = True
 
-    def export_model(self) -> bytes:
-        pass
+    def export_model(self, f) -> None:
+        if not self._initialized:
+            raise Exception('model is not initialized. nothing to export.')
+
+        pickle.dump(self.contexts, f)
     
     @staticmethod
     def request_api(document: str):
@@ -60,8 +63,8 @@ class NerContext(Context):
         if self._initialized and document.id in self.contexts:
             ners = sum([self.contexts[document.id]['by_sentence'][sentence_id] for sentence_id in related_sentence_ids],[])
         else:
-            all_sentences = "\n".join([document.sentences[sentence_id] for sentence_id in related_sentence_ids])
+            all_sentences = "\n".join([document.sentences[sentence_id].text() for sentence_id in related_sentence_ids])
             ners = self.request_api(all_sentences)
 
-        return [ner for ner in ners if re.sub('[^\w]','',ner) not in queries]
+        return [(tag, word) for tag, word in ners if re.sub('[^\w]','', word) not in queries]
 

@@ -3,11 +3,11 @@ from abc import ABCMeta, abstractmethod
 
 class Context(metaclass=ABCMeta):
     @abstractmethod
-    def import_model(self, model: bytes) -> None:
+    def import_model(self, f) -> None:
         pass
 
     @abstractmethod
-    def export_model(self) -> bytes:
+    def export_model(self, f) -> None:
         pass
 
 
