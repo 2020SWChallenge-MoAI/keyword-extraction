@@ -134,24 +134,24 @@ class KeywordExtractor(object):
     def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
-            raw_keywords = [re.sub('[^\w]','',k) for k, _ in keywords]
-            for i in range(len(raw_keywords[:num])):
-                for j in range(len(raw_keywords[:num])):
-                    if i==j:
-                        continue
-                    if (raw_keywords[j] in raw_keywords[i]) and valid[i]:
-                        valid[j] = False
-                        keywords[i] = (keywords[i][0], max(keywords[i][1],keywords[j][1]))
+            for i in range(len(keywords)):
+                for j in range(max(0,i-3), min(i+3,len(keywords))): # compare within certain range
+                    if i!=j and keywords[i][0] in keywords[j][0]:
+                        keywords[j] = (keywords[j][0], max(keywords[j][1], keywords[i][1]))
+                        valid[i] = False
 
             return sorted([k for k, v in zip(keywords, valid) if v], key=lambda x: -x[1])
 
+
         def combine_ner_and_keywords(keywords, counter):
             base_weight = 0 if len(keywords)==0 else keywords[:num - 1][-1][1]
-            ner_keywords = [(ner[1], count*random.uniform(0.1, 0.2) + base_weight) for ner, count in counter.items()][:int(num/2)]
+            max_weight = 1 if len(keywords)==0 else keywords[0][1]
+            ner_keywords = [(ner[1], count*random.uniform(0.1, max_weight) + base_weight) for ner, count in counter.items()]
 
             d = dict(keywords)
-            d.update(ner_keywords)
-
+            for k, w in ner_keywords:
+                d[k] = max(d[k], w) if k in d else w
+                
             return sorted(list(d.items()), key=lambda x:-x[1])
 
 
@@ -164,17 +164,19 @@ class KeywordExtractor(object):
         else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
 
-        if len(queries) > 0:
-            ner_keywords = self.ner_context.get_related_keywords(document, preprocessed_queries)
+        if len(preprocessed_queries) > 0: # get related named entities
+            ner_keywords = self.ner_context.get_related_keywords(document, preprocessed_queries)[:int(num*0.6)]
             keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords))
-
+        
         if len(tags) > 0: # get keywords related to ner tags
             ner_keywords = self.ner_context.get_keywords(document)
             counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
             keywords = combine_ner_and_keywords(keywords, counter)
 
         # convert to dictionary format and return
-        return [{'word': k, 'weight': w} for k, w in filter_subwords(keywords) if k not in preprocessed_queries][:num]
+        keywords = filter_subwords(keywords)
+        query_string = " ".join(preprocessed_queries)
+        return [{'word': k, 'weight': w} for k, w in keywords if token_preprocess(k) not in query_string][:num]
 
 
 class DummyExtractor(object):
