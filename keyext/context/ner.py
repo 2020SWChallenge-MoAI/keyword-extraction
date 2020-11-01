@@ -30,7 +30,7 @@ class NerContext(Context):
     @staticmethod
     def request_api(document: str):
         keywords = []
-        res = requests.post(API_SERVER_URL, json={ 'text': document})
+        res = requests.post(API_SERVER_URL, json={'text': document})
         if res.ok:
             keywords = res.json()['ners']
 
@@ -44,21 +44,15 @@ class NerContext(Context):
             return [(tag, word) for (tag, word) in self.request_api(document.text())]
 
     def get_related_keywords(self, document: Document, queries: List[str]) -> List[Tuple[str,str]]:
-        queries = [re.sub('[^\w]', '', x) for x in queries]
         sentences = [re.sub('[^\w]', '', sentence.text()) for sentence in document.sentences]
-
         related_sentence_ids = []
 
         # find all sentences containing all queries
-        for sentence_id, sentence in enumerate(sentences): 
-            if all(x in sentence for x in queries):
-                related_sentence_ids.append(sentence_id)
+        related_sentence_ids = [sentence_id for sentence_id, sentence in enumerate(sentences) if all(x in sentence for x in queries)]
         
         # find all sentences containing last queries if there are no sentences
-        if len(related_sentence_ids)==0 or (len(queries)>=3 and len(related_sentence_ids)<=5):
-            for sentence_id, sentence in enumerate(sentences):
-                if queries[-1] in sentence:
-                    related_sentence_ids.append(sentence_id)
+        if len(related_sentence_ids)==0 or (len(queries)>=2 and len(related_sentence_ids)<=5):
+            related_sentence_ids = [sentence_id for sentence_id, sentence in enumerate(sentences) if queries[-1] in sentence]
         
         if self._initialized and document.id in self.contexts:
             ners = sum([self.contexts[document.id]['by_sentence'][sentence_id] for sentence_id in related_sentence_ids],[])
@@ -66,5 +60,5 @@ class NerContext(Context):
             all_sentences = "\n".join([document.sentences[sentence_id].text() for sentence_id in related_sentence_ids])
             ners = self.request_api(all_sentences)
 
-        return [(tag, word) for tag, word in ners if re.sub('[^\w]','', word) not in queries]
+        return [(tag, word) for tag, word in ners]
 
