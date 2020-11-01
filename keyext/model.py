@@ -29,7 +29,7 @@ class Document(object):
         self.sentences: List[Sentence] = sentences
 
     def text(self):
-        return ' '.join([sent.text() for sent in self.sentences])
+        return '\n'.join([sent.text() for sent in self.sentences])
 
     def tokens(self):
         return sum([sent.tokens() for sent in self.sentences], [])
