@@ -1,20 +1,40 @@
 import re
 
 from collections import defaultdict
-from konlpy.tag import Komoran
+from konlpy.tag import Komoran, Okt
 
 from ..model import *
 from . import simple_preprocess
 
+TAGGER_KOMORAN = {
+    'instance': Komoran(),
+    'valid_tags': ('NNP', 'NNG', 'XR', 'S', 'NF'),
+    'valid_independent_tags': ('NNP', 'NNG', 'XR', 'S', 'NF'),
+    'invalid_pos': '_/NA',
+    'invalid_tag': 'NA'
+}
+
+TAGGER_OKT = {
+    'instance': Okt(),
+    'valid_tags': ('Noun'),
+    'valid_independent_tags': ('Noun'),
+    'invalid_pos': '_/Unknown',
+    'invalid_tag': 'Unknown'
+}
+
+TAGGERS = {
+    'komoran': TAGGER_KOMORAN,
+    'okt': TAGGER_OKT
+}
+
+DEFAULT_TAGGER = 'komoran'
 
 class PosTokenizer(object):
 
-    def __init__(self, tagger=Komoran()):
-        self.tagger = tagger
-
-    def tokenize(self, sent):
-        tokens = self.tagger.pos(simple_preprocess(sent))
-        tokens = [f'{word}/{tag or "NA"}' for word, tag in tokens]
+    @staticmethod
+    def tokenize(sent, mode=DEFAULT_TAGGER):
+        tokens = TAGGERS[mode]['instance'].pos(simple_preprocess(sent))
+        tokens = [f'{word}/{tag or TAGGERS[mode]["invalid_tag"]}' for word, tag in tokens]
 
         return tokens
 
@@ -24,8 +44,8 @@ class PosTokenizer(object):
         return tuple([tuple(t.split('/')) for t in tokens])
 
     @staticmethod
-    def word(token: str) -> str:
-        return ''.join([word for word, tag in PosTokenizer.subtokens(token) if tag != 'NA'])
+    def word(token: str, mode=DEFAULT_TAGGER) -> str:
+        return ' '.join([word for word, tag in PosTokenizer.subtokens(token) if tag != TAGGERS[mode]['invalid_tag']])
 
     @staticmethod
     def contains(token1: str, token2: str) -> bool:
@@ -40,25 +60,22 @@ class PosTokenizer(object):
         return False
 
 class PosValidator(object):
-    VALID_TAGS = ('NNP', 'NNG', 'XR', 'S', 'NF')
-    VALID_INDEPENDENT_TAGS = ('NNP', 'NNG', 'XR', 'S', 'NF')
-    INVALID_TOKEN = '_/NA'
 
     @staticmethod
-    def is_valid(token: str):
+    def is_valid(token: str, mode=DEFAULT_TAGGER):
         subtokens = PosTokenizer.subtokens(token)
         if len(subtokens) == 1:  # single
-            return subtokens[0][1].startswith(PosValidator.VALID_INDEPENDENT_TAGS)
+            return subtokens[0][1].startswith(TAGGERS[mode]['valid_independent_tags'])
         else:
-            if not all([tag.startswith(PosValidator.VALID_TAGS) for _, tag in subtokens]):
+            if not all([tag.startswith(TAGGERS[mode]['valid_tags']) for _, tag in subtokens]):
                 return False
             if len(set(subtokens)) <= 1:
                 return False
         return True
 
     @staticmethod
-    def filter(tokens: List[str]):
-        return [token if PosValidator.is_valid(token) else PosValidator.INVALID_TOKEN for token in tokens]
+    def filter(tokens: List[str], mode=DEFAULT_TAGGER):
+        return [token if PosValidator.is_valid(token, mode) else TAGGERS[mode]['invalid_pos'] for token in tokens]
 
 class NgramTokenizer(object):
     @staticmethod

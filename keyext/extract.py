@@ -11,7 +11,6 @@ from .context import *
 from .model import *
 from .util import NgramTokenizer, PosTokenizer, PosValidator
 from .util import token_preprocess
-from .util import same_cheon
 
 
 logger = logging.getLogger(__name__)
@@ -22,8 +21,6 @@ class KeywordExtractor(object):
         self.tfidf_context = TfidfContext()
         self.word2vec_context = Word2VecContext()
         self.ner_context = NerContext()
-
-        self.tokenizer: PosTokenizer = PosTokenizer()
 
         if model_path is not None:
             self.load(model_path)
@@ -86,52 +83,65 @@ class KeywordExtractor(object):
         #self.word2vec_context.build(list(self.documents.values()))
         #logger.info('word2vec context build complete')
 
-    def _build_document(self, doc_id, raw_sentences):
+    def _build_document(self, doc_id, raw_sentences, ngram=True):
         # initialize sentences
         sentences = []
         for sent_id, raw_sentence in enumerate(raw_sentences):
             sentence = Sentence(f'{doc_id}.{sent_id}', raw_sentence.strip())
 
-            tokens = self.tokenizer.tokenize(sentence.text())
+            tokens = PosTokenizer.tokenize(sentence.text())
             sentence.set_tokens(tokens)
 
+            if not ngram:
+                for token in tokens:
+                    word = PosTokenizer.word(token)
+                    self.word2tokens[word].add(token)
+
+                    subtokens = PosTokenizer.subtokens(token)
+                    for word, _ in subtokens:
+                        if ' ' in word:
+                            for subword in word.split():
+                                self.word2tokens[subword].add(token)
+                        self.word2tokens[word].add(token)
+            
             sentences.append(sentence)
 
         # initialize document
         document = Document(f'{doc_id}', sentences)
 
         # generate ngram tokens
-        ngram_context = NgramTokenizer.build_ngram_context(document)
-        for sent in sentences:
-            ngram_tokens = NgramTokenizer.tokenize(sent, ngram_context)
-            sent.set_tokens(PosValidator.filter(ngram_tokens))
+        if ngram:
+            ngram_context = NgramTokenizer.build_ngram_context(document)
+            for sent in sentences:
+                ngram_tokens = NgramTokenizer.tokenize(sent, ngram_context)
+                sent.set_tokens(PosValidator.filter(ngram_tokens))
 
-            for token in ngram_tokens:
-                if not PosValidator.is_valid(token):
-                    continue
+                for token in ngram_tokens:
+                    if not PosValidator.is_valid(token):
+                        continue
 
-                word = PosTokenizer.word(token)
-                self.word2tokens[word].add(token)
-
-                subtokens = PosTokenizer.subtokens(token)
-                for word, _ in subtokens:
-                    if ' ' in word:
-                        for subword in word.split():
-                            self.word2tokens[subword].add(token)
+                    word = PosTokenizer.word(token)
                     self.word2tokens[word].add(token)
+
+                    subtokens = PosTokenizer.subtokens(token)
+                    for word, _ in subtokens:
+                        if ' ' in word:
+                            for subword in word.split():
+                                self.word2tokens[subword].add(token)
+                        self.word2tokens[word].add(token)
 
         logger.info(f'document {doc_id} converting complete')
         return document
 
-    def recommend(self, document_id, queries: List[str] = [], tags: List[str]= [], num: int = 3) -> List[Dict]:
+    def recommend(self, document_id, queries: List[str] = [], tags: List[str]= [], num: int = 3, use_ner=True) -> List[Dict]:
         document = self.documents[document_id]
-        return self._recommend(document, queries, tags, num)
+        return self._recommend(document, queries, tags, num, use_ner)
 
-    def recommend_from_sentences(self, sentences: List[str], queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
+    def recommend_from_sentences(self, sentences: List[str], queries: List[str] = [], tags: List[str] = [], num: int = 3, use_ner=True) -> List[Dict]:
         document = self._build_document(Document.TEMP_ID, sentences)
         return self._recommend(document, queries, tags, num)
 
-    def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3) -> List[Dict]:
+    def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3, use_ner=True) -> List[Dict]:
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
             for i in range(len(keywords)):
@@ -161,17 +171,21 @@ class KeywordExtractor(object):
 
         if len(query_tokens) > 0: # get related keywords
             keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
+            # if related keywords are empty, get non-contextual keywords
+            if not keywords:
+                keywords = self.tfidf_context.get_keywords(document)
         else: # non-contextual keywords extraction
             keywords = self.tfidf_context.get_keywords(document)
-
-        if len(preprocessed_queries) > 0: # get related named entities
-            ner_keywords = self.ner_context.get_related_keywords(document, preprocessed_queries)[:int(num*0.6)]
-            keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords))
         
-        if len(tags) > 0: # get keywords related to ner tags
-            ner_keywords = self.ner_context.get_keywords(document)
-            counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
-            keywords = combine_ner_and_keywords(keywords, counter)
+        if use_ner:
+            if len(preprocessed_queries) > 0: # get related named entities
+                ner_keywords = self.ner_context.get_related_keywords(document, preprocessed_queries)[:int(num*0.6)]
+                keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords))
+            
+            if len(tags) > 0: # get keywords related to ner tags
+                ner_keywords = self.ner_context.get_keywords(document)
+                counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
+                keywords = combine_ner_and_keywords(keywords, counter)
 
         # convert to dictionary format and return
         keywords = filter_subwords(keywords)

@@ -60,5 +60,5 @@ class NerContext(Context):
             all_sentences = "\n".join([document.sentences[sentence_id].text() for sentence_id in related_sentence_ids])
             ners = self.request_api(all_sentences)
 
-        return [(tag, word) for tag, word in ners]
+        return [(tag, word) for tag, word in ners if tag != 'NUM']
 

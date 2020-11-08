@@ -24,10 +24,11 @@ class TfidfContext(Context):
 
         self.tokenizer = _identical_tokenizer
         self.count_vectorizer = CountVectorizer(
-            ngram_range=(1, 3),
+            ngram_range=(1, 1),
             tokenizer=self.tokenizer,
             lowercase=False,
-            max_df=0.5
+            max_df=0.5,
+            min_df=3,
             #stop_words=[PosValidator.INVALID_TOKEN]
         )
         self.tfidf_transformer = TfidfTransformer()
