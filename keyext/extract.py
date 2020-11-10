@@ -41,7 +41,10 @@ class KeywordExtractor(object):
                     continue
 
                 with open(context_path, 'rb') as f:
-                    context.import_model(f)
+                    if context_name == 'ner':
+                        context.import_model(f, os.path.join(os.path.dirname(model_path),'ner'))
+                    else:
+                        context.import_model(f)
         except:
             raise ValueError('model is not a valid file.')
 
@@ -141,7 +144,11 @@ class KeywordExtractor(object):
         document = self._build_document(Document.TEMP_ID, sentences)
         return self._recommend(document, queries, tags, num)
 
+<<<<<<< Updated upstream
     def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3, use_ner=True) -> List[Dict]:
+=======
+    def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3, use_ner = True) -> List[Dict]:
+>>>>>>> Stashed changes
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
             for i in range(len(keywords)):
@@ -153,10 +160,22 @@ class KeywordExtractor(object):
             return sorted([k for k, v in zip(keywords, valid) if v], key=lambda x: -x[1])
 
 
-        def combine_ner_and_keywords(keywords, counter):
-            base_weight = 0 if len(keywords)==0 else keywords[:num - 1][-1][1]
-            max_weight = 1 if len(keywords)==0 else keywords[0][1]
-            ner_keywords = [(ner[1], count*random.uniform(0.1, max_weight) + base_weight) for ner, count in counter.items()]
+        def combine_ner_and_keywords(keywords, counter, is_template):
+            def suppress_count(count, thres):
+                return thres if count >= thres else count
+
+            keywords_count = len(keywords[:num])
+            median_score = 0 if keywords_count==0 else keywords[keywords_count//2][1]
+            max_score = 1 if keywords_count==0 else keywords[0][1]
+            base_score = max_score if is_template else median_score
+
+            ner_keywords = []
+            for ner, count in counter.items():
+                # score = ((max_score-median_score)/num)*suppress_count(count, num) + base_score 
+                if is_template:
+                    ner_keywords.append((ner[1], max_score+(0.001*count)))
+                else:
+                    ner_keywords.append((ner[1], median_score+random.uniform(median_score, max_score)*count))
 
             d = dict(keywords)
             for k, w in ner_keywords:
@@ -169,6 +188,7 @@ class KeywordExtractor(object):
         preprocessed_queries = [token_preprocess(k) for k in queries]
         query_tokens = sum([list(self.word2tokens[k]) for k in preprocessed_queries], [])
 
+
         if len(query_tokens) > 0: # get related keywords
             keywords = self.tfidf_context.get_related_keywords(document, query_tokens)
             # if related keywords are empty, get non-contextual keywords
@@ -180,12 +200,12 @@ class KeywordExtractor(object):
         if use_ner:
             if len(preprocessed_queries) > 0: # get related named entities
                 ner_keywords = self.ner_context.get_related_keywords(document, preprocessed_queries)[:int(num*0.6)]
-                keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords))
+                keywords = combine_ner_and_keywords(keywords, Counter(ner_keywords), is_template=False)
             
             if len(tags) > 0: # get keywords related to ner tags
                 ner_keywords = self.ner_context.get_keywords(document)
                 counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
-                keywords = combine_ner_and_keywords(keywords, counter)
+                keywords = combine_ner_and_keywords(keywords, counter, is_template=True)
 
         # convert to dictionary format and return
         keywords = filter_subwords(keywords)
