@@ -144,11 +144,7 @@ class KeywordExtractor(object):
         document = self._build_document(Document.TEMP_ID, sentences)
         return self._recommend(document, queries, tags, num)
 
-<<<<<<< Updated upstream
-    def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3, use_ner=True) -> List[Dict]:
-=======
     def _recommend(self, document: Document, queries: List[str] = [], tags: List[str] = [], num: int = 3, use_ner = True) -> List[Dict]:
->>>>>>> Stashed changes
         def filter_subwords(keywords):
             valid = [True for _ in range(len(keywords))]
             for i in range(len(keywords)):
