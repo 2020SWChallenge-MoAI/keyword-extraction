@@ -205,8 +205,8 @@ class KeywordExtractor(object):
 
         # convert to dictionary format and return
         keywords = filter_subwords(keywords)
-        query_string = " ".join(preprocessed_queries)
-        return [{'word': k, 'weight': w} for k, w in keywords if token_preprocess(k) not in query_string][:num]
+        query_string = " ".join(preprocessed_queries).replace(' ', '')
+        return [{'word': k, 'weight': w} for k, w in keywords if k.replace(' ','') not in query_string][:num]
 
 
 class DummyExtractor(object):

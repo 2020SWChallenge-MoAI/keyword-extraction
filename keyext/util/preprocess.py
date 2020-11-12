@@ -7,7 +7,7 @@ spaces_pattern = re.compile(r'\s+')
 repeatchars_pattern = re.compile(r'([ㄱ-ㅎ가-힣\w])\1{3,}')
 
 def token_preprocess(raw_token):
-    return simple_preprocess(raw_token).replace(' ', '')
+    return simple_preprocess(raw_token)
 
 def simple_preprocess(raw_document):
     doc = repeatchars_pattern.sub(r'\1' * 3, raw_document)
