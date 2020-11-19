@@ -201,7 +201,7 @@ class KeywordExtractor(object):
             if len(tags) > 0: # get keywords related to ner tags
                 ner_keywords = self.ner_context.get_keywords(document)
                 counter = Counter(filter(lambda x: x[0] in tags, ner_keywords)) # filter by tags
-                keywords = combine_ner_and_keywords(keywords, counter, is_template=True)
+                keywords = combine_ner_and_keywords([], counter, is_template=True)
 
         # convert to dictionary format and return
         keywords = filter_subwords(keywords)
