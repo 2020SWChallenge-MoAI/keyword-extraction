@@ -28,7 +28,7 @@ class TfidfContext(Context):
             tokenizer=self.tokenizer,
             lowercase=False,
             max_df=0.5,
-            min_df=3,
+            min_df=1,
             #stop_words=[PosValidator.INVALID_TOKEN]
         )
         self.tfidf_transformer = TfidfTransformer()
